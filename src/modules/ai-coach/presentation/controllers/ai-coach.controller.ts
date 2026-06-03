@@ -14,8 +14,10 @@ import {
   CurrentUser,
 } from '../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { ChatMessageDto } from '../../application/dto/chat-message.dto';
 import { CreateAiCoachSessionDto } from '../../application/dto/create-ai-coach-session.dto';
 import { UpdateAiCoachSessionDto } from '../../application/dto/update-ai-coach-session.dto';
+import { AiChatService } from '../../application/services/ai-chat.service';
 import { AiCoachService } from '../../application/services/ai-coach.service';
 
 @ApiTags('ai-coach')
@@ -23,7 +25,15 @@ import { AiCoachService } from '../../application/services/ai-coach.service';
 @UseGuards(JwtAuthGuard)
 @Controller('ai-coach')
 export class AiCoachController {
-  constructor(private readonly service: AiCoachService) {}
+  constructor(
+    private readonly service: AiCoachService,
+    private readonly aiChat: AiChatService,
+  ) {}
+
+  @Post('chat')
+  chat(@CurrentUser() user: AuthUserPayload, @Body() dto: ChatMessageDto) {
+    return this.aiChat.chat(user.sub, dto.message, dto.sessionId);
+  }
 
   @Get()
   findAll(@CurrentUser() user: AuthUserPayload) {

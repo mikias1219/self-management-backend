@@ -5,6 +5,7 @@ import { DatabaseModule } from './database/database.module';
 import { SeedModule } from './database/seeds/seed.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { RealtimeModule } from './infrastructure/realtime/realtime.module';
+import { AchievementsModule } from './modules/achievements/achievements.module';
 import { ActivityLogsModule } from './modules/activity-logs/activity-logs.module';
 import { AiCoachModule } from './modules/ai-coach/ai-coach.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
@@ -47,6 +48,7 @@ import { AppService } from './app.service';
     SettingsModule,
     AiCoachModule,
     AnalyticsModule,
+    AchievementsModule,
     DashboardModule,
     SeedModule,
   ],

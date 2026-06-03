@@ -19,4 +19,6 @@ export default () => ({
   },
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
   seedOnStart: process.env.SEED_ON_START === 'true',
+  openApiKey: process.env.OPEN_API_KEY ?? '',
+  openAiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
 });

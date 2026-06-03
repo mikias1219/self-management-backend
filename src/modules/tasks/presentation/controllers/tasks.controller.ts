@@ -15,6 +15,7 @@ import {
 } from '../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 import { CreateTaskDto } from '../../application/dto/create-task.dto';
+import { ReportTaskDto } from '../../application/dto/report-task.dto';
 import { UpdateTaskDto } from '../../application/dto/update-task.dto';
 import { TasksService } from '../../application/services/tasks.service';
 
@@ -47,6 +48,15 @@ export class TasksController {
     @Body() dto: UpdateTaskDto,
   ) {
     return this.service.update(id, dto, user.sub);
+  }
+
+  @Post(':id/report')
+  report(
+    @CurrentUser() user: AuthUserPayload,
+    @Param('id') id: string,
+    @Body() dto: ReportTaskDto,
+  ) {
+    return this.service.reportTask(user.sub, id, dto);
   }
 
   @Delete(':id')

@@ -60,8 +60,20 @@ export class HabitsService extends BaseCrudService<Habit> {
       action: ActivityAction.LOGGED,
       entityType: 'HabitLog',
       entityId: saved.id,
-      metadata: { habitId, ...dto },
+      description: `Logged habit: ${habit.name}`,
+      metadata: { habitId, habitName: habit.name, ...dto },
     });
+    if (nextStreak >= 7 && nextStreak % 7 === 0) {
+      await this.activityLogs.log({
+        userId,
+        module: ActivityModule.HABITS,
+        action: ActivityAction.COMPLETED,
+        entityType: 'Habit',
+        entityId: habitId,
+        description: `${habit.name} — ${nextStreak}-day streak`,
+        metadata: { streak: nextStreak },
+      });
+    }
     return saved;
   }
 
