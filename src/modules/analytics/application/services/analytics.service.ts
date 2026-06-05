@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { format } from 'date-fns';
+import { Between, IsNull, Repository } from 'typeorm';
 import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
 import { resolveDateRange } from '../../../../common/utils/date-range.util';
+import { TaskStatus } from '../../../tasks/domain/enums/task.enums';
 import { DailyReview } from '../../../daily-reviews/domain/entities/daily-review.entity';
 import { EnglishPractice } from '../../../english/domain/entities/english-practice.entity';
 import { FinanceTransaction } from '../../../finance/domain/entities/transaction.entity';
@@ -53,7 +55,11 @@ export class AnalyticsService {
     query: DateRangeQueryDto,
   ): Promise<{ period: DateRangeQueryDto; range: { start: Date; end: Date }; counts: ModuleCounts }> {
     const range = resolveDateRange(query.period, query.startDate, query.endDate);
-    const between = Between(range.start, range.end);
+    const timeBetween = Between(range.start, range.end);
+    const dateBetween = Between(
+      format(range.start, 'yyyy-MM-dd'),
+      format(range.end, 'yyyy-MM-dd'),
+    );
 
     const [
       tasks,
@@ -69,18 +75,49 @@ export class AnalyticsService {
       healthLogs,
       journalEntries,
     ] = await Promise.all([
-      this.tasksRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.goalsRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.habitLogsRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.dailyReviewsRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.studySessionsRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.coursesRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.booksRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.transactionsRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.englishRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.spiritualRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.healthRepo.count({ where: { createdBy: userId, createdAt: between } }),
-      this.journalRepo.count({ where: { createdBy: userId, createdAt: between } }),
+      this.tasksRepo.count({
+        where: {
+          createdBy: userId,
+          taskStatus: TaskStatus.DONE,
+          completedAt: timeBetween,
+        },
+      }),
+      this.goalsRepo.count({
+        where: [
+          { createdBy: userId, targetDate: dateBetween },
+          { createdBy: userId, targetDate: IsNull(), updatedAt: timeBetween },
+        ],
+      }),
+      this.habitLogsRepo.count({
+        where: { createdBy: userId, completedAt: timeBetween },
+      }),
+      this.dailyReviewsRepo.count({
+        where: { createdBy: userId, reviewDate: dateBetween },
+      }),
+      this.studySessionsRepo.count({
+        where: { createdBy: userId, sessionDate: dateBetween },
+      }),
+      this.coursesRepo.count({
+        where: { createdBy: userId, updatedAt: timeBetween },
+      }),
+      this.booksRepo.count({
+        where: { createdBy: userId, updatedAt: timeBetween },
+      }),
+      this.transactionsRepo.count({
+        where: { createdBy: userId, transactionDate: dateBetween },
+      }),
+      this.englishRepo.count({
+        where: { createdBy: userId, practiceDate: dateBetween },
+      }),
+      this.spiritualRepo.count({
+        where: { createdBy: userId, activityDate: dateBetween },
+      }),
+      this.healthRepo.count({
+        where: { createdBy: userId, logDate: dateBetween },
+      }),
+      this.journalRepo.count({
+        where: { createdBy: userId, entryDate: dateBetween },
+      }),
     ]);
 
     return {

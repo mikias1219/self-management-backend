@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DeepPartial, Repository } from 'typeorm';
+import { DeepPartial, FindManyOptions, FindOptionsWhere, Repository } from 'typeorm';
 import {
   ActivityAction,
   ActivityModule,
@@ -26,6 +26,22 @@ export class GoalsService extends BaseCrudService<Goal> {
       userId: '',
       module: ActivityModule.GOALS,
       entityType: 'Goal',
+    });
+  }
+
+  override async findAllForUser(
+    userId: string,
+    options?: FindManyOptions<Goal> & { includeCompleted?: boolean },
+  ): Promise<Goal[]> {
+    const { includeCompleted, where, ...rest } = options ?? {};
+    const baseWhere = (where ?? {}) as FindOptionsWhere<Goal>;
+    const scopedWhere = includeCompleted
+      ? baseWhere
+      : { ...baseWhere, status: EntityStatus.ACTIVE };
+
+    return super.findAllForUser(userId, {
+      ...rest,
+      where: scopedWhere,
     });
   }
 
@@ -83,7 +99,33 @@ export class GoalsService extends BaseCrudService<Goal> {
       saved = await this.repository.save(saved);
     }
 
+    if (saved.parentId) {
+      await this.syncParentProgress(saved.parentId, userId);
+    }
+
     return saved;
+  }
+
+  private async syncParentProgress(
+    parentId: string,
+    userId: string,
+  ): Promise<void> {
+    const children = await this.repository.find({
+      where: { createdBy: userId, parentId },
+    });
+    if (children.length === 0) return;
+
+    const avgProgress = Math.round(
+      children.reduce((sum, child) => sum + (child.progress ?? 0), 0) /
+        children.length,
+    );
+    const patch: DeepPartial<Goal> = { progress: avgProgress };
+    if (avgProgress >= 100) {
+      patch.progress = 100;
+      patch.status = EntityStatus.COMPLETED;
+    }
+
+    await super.update(parentId, patch, userId);
   }
 
   override async remove(id: string, userId: string): Promise<void> {

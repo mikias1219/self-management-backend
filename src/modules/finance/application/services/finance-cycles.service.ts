@@ -1,5 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import type { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
+import { invalidateDashboardOverview } from '../../../../common/utils/dashboard-cache.util';
 import {
   addDays,
   addMonths,
@@ -49,7 +52,12 @@ export class FinanceCyclesService {
     private readonly budgetsRepo: Repository<FinanceBudget>,
     @InjectRepository(SavingsGoal)
     private readonly savingsRepo: Repository<SavingsGoal>,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
+
+  private async bustDashboardCache(userId: string): Promise<void> {
+    await invalidateDashboardOverview(this.cache, userId);
+  }
 
   async listForUser(userId: string): Promise<FinanceCycle[]> {
     return this.cyclesRepo.find({
@@ -367,6 +375,7 @@ export class FinanceCyclesService {
     cycle.cycleStatus = FinanceCycleStatus.CLOSED;
     cycle.closedAt = new Date();
     await this.cyclesRepo.save(cycle);
+    await this.bustDashboardCache(userId);
   }
 
   async openFromSalaryTx(
@@ -414,6 +423,7 @@ export class FinanceCyclesService {
         const saved = await this.cyclesRepo.save(existingOpen);
         salaryTx.cycleId = saved.id;
         await this.txRepo.save(salaryTx);
+        await this.bustDashboardCache(userId);
         return { cycle: saved, hadSalaryAlready };
       }
     }
@@ -435,6 +445,7 @@ export class FinanceCyclesService {
     salaryTx.cycleId = saved.id;
     await this.txRepo.save(salaryTx);
     await this.generatePendingObligations(userId, saved);
+    await this.bustDashboardCache(userId);
 
     return { cycle: saved, hadSalaryAlready };
   }
@@ -465,7 +476,9 @@ export class FinanceCyclesService {
     cycle.fixedObligations = dto.fixedObligations;
     cycle.savingsTarget = dto.savingsTarget;
     cycle.spendingBudget = dto.spendingBudget;
-    return this.cyclesRepo.save(cycle);
+    const saved = await this.cyclesRepo.save(cycle);
+    await this.bustDashboardCache(userId);
+    return saved;
   }
 
   getRemainingUnallocated(

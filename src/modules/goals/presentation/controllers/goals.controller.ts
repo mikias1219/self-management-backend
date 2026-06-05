@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -26,8 +27,13 @@ export class GoalsController {
   constructor(private readonly service: GoalsService) {}
 
   @Get()
-  findAll(@CurrentUser() user: AuthUserPayload) {
-    return this.service.findAllForUser(user.sub);
+  findAll(
+    @CurrentUser() user: AuthUserPayload,
+    @Query('includeCompleted') includeCompleted?: string,
+  ) {
+    return this.service.findAllForUser(user.sub, {
+      includeCompleted: includeCompleted === 'true',
+    });
   }
 
   @Get(':id')

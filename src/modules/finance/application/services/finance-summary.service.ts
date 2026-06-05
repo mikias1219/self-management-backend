@@ -64,6 +64,7 @@ export class FinanceSummaryService {
     let totalVariableExpense = 0;
 
     const expenseByCategory = new Map<string, number>();
+    const variableExpenseByCategory = new Map<string, number>();
     const incomeByCategory = new Map<string, number>();
     const dailyFlow = new Map<string, { income: number; expense: number }>();
     const expenseCatNames = new Map<string, string>();
@@ -98,6 +99,12 @@ export class FinanceSummaryService {
           expenseCatNames.set(tx.categoryId, tx.expenseCategory.name);
         }
         expenseByCategory.set(key, (expenseByCategory.get(key) ?? 0) + amount);
+        if (isVariableExpenseTx(tx)) {
+          variableExpenseByCategory.set(
+            key,
+            (variableExpenseByCategory.get(key) ?? 0) + amount,
+          );
+        }
       } else {
         totalTransfer += amount;
       }
@@ -276,6 +283,13 @@ export class FinanceSummaryService {
         name: catName(id, 'expense'),
         amount,
       })),
+      variableExpenseByCategory: [...variableExpenseByCategory.entries()].map(
+        ([id, amount]) => ({
+          categoryId: id,
+          name: catName(id, 'expense'),
+          amount,
+        }),
+      ),
       incomeByCategory: [...incomeByCategory.entries()].map(([id, amount]) => ({
         categoryId: id,
         name: catName(id, 'income'),

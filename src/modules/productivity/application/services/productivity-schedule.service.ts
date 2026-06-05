@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { addDays, endOfDay, format, startOfDay } from 'date-fns';
-import { Repository } from 'typeorm';
+import { addDays, endOfDay, format, startOfDay, subDays } from 'date-fns';
+import { Brackets, Repository } from 'typeorm';
 import { habitLogsInRange } from '../../../../common/utils/habit-logs.util';
 import { DailyReview } from '../../../daily-reviews/domain/entities/daily-review.entity';
 import { Goal } from '../../../goals/domain/entities/goal.entity';
@@ -39,6 +39,13 @@ export class ProductivityScheduleService {
       scope === 'today' ? todayEnd : endOfDay(addDays(now, days));
     const todayStr = format(now, 'yyyy-MM-dd');
     const fetchDays = scope === 'today' ? 1 : days;
+    const extendedStart = subDays(rangeStart, 7);
+    const extendedEnd = addDays(rangeEnd, 7);
+    const openStatuses = [
+      TaskStatus.TODO,
+      TaskStatus.IN_PROGRESS,
+      TaskStatus.BLOCKED,
+    ];
 
     const [
       tasks,
@@ -49,10 +56,36 @@ export class ProductivityScheduleService {
       gcStatus,
       googleApiEvents,
     ] = await Promise.all([
-        this.tasksRepo.find({
-          where: { createdBy: userId },
-          order: { dueDate: 'ASC', scheduledAt: 'ASC', createdAt: 'DESC' },
-        }),
+        this.tasksRepo
+          .createQueryBuilder('task')
+          .where('task.createdBy = :userId', { userId })
+          .andWhere(
+            new Brackets((qb) => {
+              qb.where('task.taskStatus IN (:...openStatuses)', {
+                openStatuses,
+              })
+                .orWhere(
+                  'task.dueDate IS NOT NULL AND task.dueDate BETWEEN :extendedStart AND :extendedEnd',
+                  { extendedStart, extendedEnd },
+                )
+                .orWhere(
+                  'task.scheduledAt IS NOT NULL AND task.scheduledAt BETWEEN :extendedStart AND :extendedEnd',
+                  { extendedStart, extendedEnd },
+                )
+                .orWhere(
+                  'task.taskStatus = :done AND task.completedAt BETWEEN :rangeStart AND :rangeEnd',
+                  {
+                    done: TaskStatus.DONE,
+                    rangeStart,
+                    rangeEnd,
+                  },
+                );
+            }),
+          )
+          .orderBy('task.dueDate', 'ASC', 'NULLS LAST')
+          .addOrderBy('task.scheduledAt', 'ASC', 'NULLS LAST')
+          .addOrderBy('task.createdAt', 'DESC')
+          .getMany(),
         this.goalsRepo.find({
           where: { createdBy: userId },
           order: { targetDate: 'ASC', updatedAt: 'DESC' },

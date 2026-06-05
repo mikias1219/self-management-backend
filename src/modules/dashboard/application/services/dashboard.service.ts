@@ -5,9 +5,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TaskStatus } from '../../../tasks/domain/enums/task.enums';
 import { Task } from '../../../tasks/domain/entities/task.entity';
+import { dashboardOverviewCacheKey } from '../../../../common/utils/dashboard-cache.util';
 import { LifeIntelligenceService } from '../../../analytics/application/services/life-intelligence.service';
 
-const OVERVIEW_CACHE_TTL_MS = 60_000;
+const OVERVIEW_CACHE_TTL_MS = 30_000;
 
 @Injectable()
 export class DashboardService {
@@ -18,7 +19,7 @@ export class DashboardService {
   ) {}
 
   async getOverview(userId: string) {
-    const cacheKey = `dashboard:overview:${userId}`;
+    const cacheKey = dashboardOverviewCacheKey(userId);
     const cached = await this.cache.get<Awaited<ReturnType<typeof this.buildOverview>>>(
       cacheKey,
     );
@@ -67,6 +68,7 @@ export class DashboardService {
         savingsRate: snapshot.finance.monthly.savingsRate,
         burnRate: snapshot.finance.burnRate,
         forecastEndOfMonthNet: snapshot.finance.forecast.endOfMonthNet,
+        remainingUnallocated: snapshot.finance.remainingUnallocated,
       },
       taskStatus: {
         pending: pendingTasks,

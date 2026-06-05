@@ -1,5 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import type { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
+import { invalidateDashboardOverview } from '../../../../common/utils/dashboard-cache.util';
 import { endOfDay, format } from 'date-fns';
 import { DeepPartial, Repository } from 'typeorm';
 import {
@@ -24,6 +27,7 @@ export class TasksService extends BaseCrudService<Task> {
     private readonly goalsRepo: Repository<Goal>,
     activityLogs: ActivityLogsService,
     private readonly googleCalendar: GoogleCalendarService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {
     super(repository, activityLogs, {
       userId: '',
@@ -37,11 +41,15 @@ export class TasksService extends BaseCrudService<Task> {
     userId: string,
   ): Promise<Task> {
     const patch = this.normalizeScheduleFields(dto);
+    if (dto.syncToCalendar !== false && dto.syncToCalendar !== true) {
+      patch.syncToCalendar = await this.googleCalendar.isConnected(userId);
+    }
     let saved = await super.create(patch, userId);
     saved = await this.persistCalendarSync(userId, saved);
     if (saved.goalId) {
       await this.syncLinkedGoalProgress(userId, saved.goalId);
     }
+    await invalidateDashboardOverview(this.cache, userId);
     return saved;
   }
 
@@ -90,6 +98,7 @@ export class TasksService extends BaseCrudService<Task> {
       await this.syncLinkedGoalProgress(userId, goalId);
     }
 
+    await invalidateDashboardOverview(this.cache, userId);
     return saved;
   }
 
@@ -105,6 +114,7 @@ export class TasksService extends BaseCrudService<Task> {
     if (goalId) {
       await this.syncLinkedGoalProgress(userId, goalId);
     }
+    await invalidateDashboardOverview(this.cache, userId);
   }
 
   async reportTask(
@@ -122,6 +132,7 @@ export class TasksService extends BaseCrudService<Task> {
     if (saved.goalId) {
       await this.syncLinkedGoalProgress(userId, saved.goalId);
     }
+    await invalidateDashboardOverview(this.cache, userId);
     return saved;
   }
 
@@ -144,7 +155,7 @@ export class TasksService extends BaseCrudService<Task> {
       patch.scheduledAt = patch.dueDate;
     }
     if (patch.syncToCalendar == null) {
-      patch.syncToCalendar = true;
+      patch.syncToCalendar = false;
     }
     return patch;
   }

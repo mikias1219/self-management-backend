@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { FinanceModule } from '../finance/finance.module';
 import { DailyReview } from '../daily-reviews/domain/entities/daily-review.entity';
 import { EnglishPractice } from '../english/domain/entities/english-practice.entity';
 import { FinanceAccount } from '../finance/domain/entities/account.entity';
@@ -22,6 +23,7 @@ import { AnalyticsController } from './presentation/controllers/analytics.contro
 
 @Module({
   imports: [
+    FinanceModule,
     TypeOrmModule.forFeature([
       Task,
       Goal,

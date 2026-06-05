@@ -11,6 +11,7 @@ import { GoalsService } from '../../../goals/application/services/goals.service'
 import { HabitsService } from '../../../habits/application/services/habits.service';
 import { JournalEntryType } from '../../../journal/domain/enums/journal.enums';
 import { JournalService } from '../../../journal/application/services/journal.service';
+import { NotificationsService } from '../../../notifications/application/services/notifications.service';
 import { TasksService } from '../../../tasks/application/services/tasks.service';
 import { TaskPriority, TaskStatus } from '../../../tasks/domain/enums/task.enums';
 
@@ -54,7 +55,17 @@ export class AiActionsService {
     private readonly transactions: TransactionsService,
     @InjectRepository(FinanceAccount)
     private readonly accountsRepo: Repository<FinanceAccount>,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  private async notifyAction(
+    userId: string,
+    title: string,
+    message: string,
+    link: string,
+  ): Promise<void> {
+    await this.notifications.notifyUser(userId, { title, message, link });
+  }
 
   /** OpenAI tool/function definitions the assistant may propose. */
   getToolDefinitions(): ToolDef[] {
@@ -256,6 +267,12 @@ export class AiActionsService {
       },
       userId,
     );
+    await this.notifyAction(
+      userId,
+      'AI Coach created a task',
+      task.title,
+      '/productivity?tab=tasks',
+    );
     return { ok: true, message: `Created task "${task.title}".` };
   }
 
@@ -278,6 +295,12 @@ export class AiActionsService {
       return { ok: false, message: `No open task matching "${str(args.title)}".` };
     }
     await this.tasks.update(match.id, { taskStatus: TaskStatus.DONE }, userId);
+    await this.notifyAction(
+      userId,
+      'AI Coach completed a task',
+      match.title,
+      '/productivity?tab=tasks',
+    );
     return { ok: true, message: `Marked "${match.title}" as done.` };
   }
 
@@ -297,6 +320,12 @@ export class AiActionsService {
     await this.habits.createLog(userId, match.id, {
       completedAt: new Date().toISOString(),
     });
+    await this.notifyAction(
+      userId,
+      'AI Coach logged a habit',
+      match.name,
+      '/productivity?tab=habits',
+    );
     return { ok: true, message: `Logged "${match.name}" for today.` };
   }
 
@@ -317,6 +346,12 @@ export class AiActionsService {
         targetDate: str(args.targetDate) || undefined,
       },
       userId,
+    );
+    await this.notifyAction(
+      userId,
+      'AI Coach created a goal',
+      goal.title,
+      '/productivity?tab=goals',
     );
     return { ok: true, message: `Created ${level} goal "${goal.title}".` };
   }
@@ -341,6 +376,12 @@ export class AiActionsService {
         entryDate: format(new Date(), 'yyyy-MM-dd'),
       },
       userId,
+    );
+    await this.notifyAction(
+      userId,
+      'AI Coach added a journal entry',
+      title,
+      '/life?tab=journal',
     );
     return { ok: true, message: `Added journal entry "${title}".` };
   }
@@ -383,6 +424,12 @@ export class AiActionsService {
         description: str(args.description) || undefined,
       },
       userId,
+    );
+    await this.notifyAction(
+      userId,
+      'AI Coach recorded a transaction',
+      `${type} ${amount} ${account.currency}`,
+      '/life?tab=finance',
     );
     return {
       ok: true,

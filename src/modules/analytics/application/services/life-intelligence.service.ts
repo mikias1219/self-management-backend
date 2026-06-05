@@ -4,8 +4,6 @@ import {
   addDays,
   differenceInCalendarDays,
   format,
-  getDate,
-  getDaysInMonth,
   startOfDay,
 } from 'date-fns';
 import { Between, In, Repository } from 'typeorm';
@@ -14,11 +12,9 @@ import { AnalyticsPeriod } from '../../../../common/domain/enums/period.enum';
 import { LifeArea } from '../../../../common/domain/enums/life-area.enum';
 import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
 import { resolveDateRange } from '../../../../common/utils/date-range.util';
+import { FinanceSummaryService } from '../../../finance/application/services/finance-summary.service';
 import { FinanceAccount } from '../../../finance/domain/entities/account.entity';
-import { ExpenseCategory } from '../../../finance/domain/entities/expense-category.entity';
-import { IncomeCategory } from '../../../finance/domain/entities/income-category.entity';
 import { FinanceTransaction } from '../../../finance/domain/entities/transaction.entity';
-import { TransactionType } from '../../../finance/domain/enums/finance.enums';
 import { Goal } from '../../../goals/domain/entities/goal.entity';
 import { Habit } from '../../../habits/domain/entities/habit.entity';
 import { StudySession } from '../../../learning/domain/entities/study-session.entity';
@@ -57,16 +53,13 @@ export class LifeIntelligenceService {
     @InjectRepository(Task) private readonly tasksRepo: Repository<Task>,
     @InjectRepository(Goal) private readonly goalsRepo: Repository<Goal>,
     @InjectRepository(Habit) private readonly habitsRepo: Repository<Habit>,
-    @InjectRepository(FinanceTransaction)
-    private readonly txRepo: Repository<FinanceTransaction>,
     @InjectRepository(FinanceAccount)
     private readonly accountsRepo: Repository<FinanceAccount>,
-    @InjectRepository(ExpenseCategory)
-    private readonly expenseCatRepo: Repository<ExpenseCategory>,
-    @InjectRepository(IncomeCategory)
-    private readonly incomeCatRepo: Repository<IncomeCategory>,
+    @InjectRepository(FinanceTransaction)
+    private readonly txRepo: Repository<FinanceTransaction>,
     @InjectRepository(StudySession)
     private readonly studyRepo: Repository<StudySession>,
+    private readonly financeSummary: FinanceSummaryService,
   ) {}
 
   async getFinanceIntelligence(userId: string, query?: DateRangeQueryDto) {
@@ -75,109 +68,74 @@ export class LifeIntelligenceService {
       query?.startDate,
       query?.endDate,
     );
-    const weekRange = resolveDateRange(AnalyticsPeriod.WEEK);
     const now = new Date();
 
-    const monthBetween = Between(
-      format(monthRange.start, 'yyyy-MM-dd'),
-      format(monthRange.end, 'yyyy-MM-dd'),
-    );
-    const weekBetween = Between(
-      format(weekRange.start, 'yyyy-MM-dd'),
-      format(weekRange.end, 'yyyy-MM-dd'),
-    );
-
-    const [monthTx, weekTx, accounts, expenseCats, incomeCats] = await Promise.all([
-      this.txRepo.find({
-        where: { createdBy: userId, transactionDate: monthBetween },
-        relations: { account: true },
-        order: { transactionDate: 'ASC' },
+    const [monthSummary, weekSummary, accounts] = await Promise.all([
+      this.financeSummary.getSummary(userId, {
+        period: query?.period ?? AnalyticsPeriod.MONTH,
+        startDate: query?.startDate,
+        endDate: query?.endDate,
       }),
-      this.txRepo.find({
-        where: { createdBy: userId, transactionDate: weekBetween },
-        relations: { account: true },
-      }),
+      this.financeSummary.getSummary(userId, { period: AnalyticsPeriod.WEEK }),
       this.accountsRepo.find({ where: { createdBy: userId } }),
-      this.expenseCatRepo.find({ where: { createdBy: userId } }),
-      this.incomeCatRepo.find({ where: { createdBy: userId } }),
     ]);
 
-    const aggregate = (txs: FinanceTransaction[]) => {
-      let income = 0;
-      let expense = 0;
-      const byCategory = new Map<string, number>();
-      for (const tx of txs) {
-        const amt = toNum(tx.amount);
-        if (tx.transactionType === TransactionType.INCOME) {
-          income += amt;
-        } else if (tx.transactionType === TransactionType.EXPENSE) {
-          expense += amt;
-          const key = tx.categoryId ?? 'uncategorized';
-          byCategory.set(key, (byCategory.get(key) ?? 0) + amt);
-        }
-      }
-      return { income, expense, net: income - expense, byCategory };
-    };
+    const monthTotals = monthSummary.totals;
+    const weekTotals = weekSummary.totals;
+    const variableExpenseTotal = monthSummary.variableExpenseByCategory.reduce(
+      (s, c) => s + c.amount,
+      0,
+    );
 
-    const month = aggregate(monthTx);
-    const week = aggregate(weekTx);
-    const savingsRate =
-      month.income > 0 ? Math.round((month.net / month.income) * 1000) / 10 : 0;
-
-    const daysElapsed = Math.max(1, differenceInCalendarDays(now, monthRange.start) + 1);
-    const daysInMonth = getDaysInMonth(now);
-    const burnRate = Math.round((month.expense / daysElapsed) * 100) / 100;
-    const forecastExpense = Math.round(burnRate * daysInMonth * 100) / 100;
-    const forecastNet = Math.round((month.income - forecastExpense) * 100) / 100;
-
-    const catName = (id: string) => {
-      if (id === 'uncategorized') return 'Uncategorized';
-      return (
-        expenseCats.find((c) => c.id === id)?.name ??
-        incomeCats.find((c) => c.id === id)?.name ??
-        'Unknown'
-      );
-    };
-
-    const spendingByCategory = [...month.byCategory.entries()]
-      .map(([id, amount]) => ({
-        categoryId: id,
-        name: catName(id),
-        amount,
+    const spendingByCategory = monthSummary.variableExpenseByCategory
+      .map((c) => ({
+        categoryId: c.categoryId,
+        name: c.name,
+        amount: c.amount,
         percentOfExpense:
-          month.expense > 0 ? Math.round((amount / month.expense) * 1000) / 10 : 0,
+          variableExpenseTotal > 0
+            ? Math.round((c.amount / variableExpenseTotal) * 1000) / 10
+            : 0,
       }))
       .sort((a, b) => b.amount - a.amount);
 
     const topOverspend = spendingByCategory[0] ?? null;
-    const currency =
-      monthTx.find((t) => t.currency)?.currency ??
-      accounts[0]?.currency ??
-      'ETB';
+    const currency = accounts[0]?.currency ?? 'ETB';
+    const daysInPeriod = Math.max(
+      1,
+      differenceInCalendarDays(monthRange.end, monthRange.start) + 1,
+    );
+    const daysElapsed = Math.max(
+      1,
+      differenceInCalendarDays(now < monthRange.end ? now : monthRange.end, monthRange.start) + 1,
+    );
+    const remainingDays = Math.max(0, daysInPeriod - daysElapsed);
 
     return {
       currency,
       monthly: {
-        income: month.income,
-        expense: month.expense,
-        netBalance: month.net,
-        savingsRate,
+        income: monthTotals.totalIncome,
+        expense: monthTotals.totalExpense,
+        netBalance: monthTotals.netCashFlow,
+        savingsRate: monthTotals.savingsRate,
       },
       weekly: {
-        income: week.income,
-        expense: week.expense,
-        netBalance: week.net,
+        income: weekTotals.totalIncome,
+        expense: weekTotals.totalExpense,
+        netBalance: weekTotals.netCashFlow,
       },
-      burnRate,
+      burnRate: monthTotals.burnRate,
       forecast: {
-        endOfMonthExpense: forecastExpense,
-        endOfMonthNet: forecastNet,
-        daysRemaining: daysInMonth - getDate(now),
+        endOfMonthExpense: monthTotals.forecastEndOfMonthExpense,
+        endOfMonthNet: monthTotals.forecastEndOfMonthNet,
+        daysRemaining: remainingDays,
       },
       spendingByCategory,
       topOverspendCategory: topOverspend?.name ?? null,
-      accountBalance: accounts.reduce((s, a) => s + toNum(a.balance), 0),
-      transactionCount: monthTx.length,
+      accountBalance: monthTotals.netWorth,
+      transactionCount: monthTotals.transactionCount,
+      remainingUnallocated: monthSummary.currentCycle?.remainingUnallocated ?? 0,
+      financialHealthScore: monthSummary.currentCycle?.financialHealthScore ?? null,
     };
   }
 
@@ -351,11 +309,13 @@ export class LifeIntelligenceService {
         ? Math.round((loggedHabitIds.size / habits.length) * 1000) / 10
         : 0;
 
-    const financialHealthScore = Math.round(
-      Math.min(finance.monthly.savingsRate, 100) * 0.5 +
-        (finance.monthly.netBalance >= 0 ? 30 : 0) +
-        (finance.forecast.endOfMonthNet >= 0 ? 20 : 0),
-    );
+    const financialHealthScore =
+      finance.financialHealthScore ??
+      Math.round(
+        Math.min(finance.monthly.savingsRate, 100) * 0.5 +
+          (finance.monthly.netBalance >= 0 ? 30 : 0) +
+          (finance.forecast.endOfMonthNet >= 0 ? 20 : 0),
+      );
 
     const productivityScore = tasks.metrics.productivityScore;
 
@@ -444,7 +404,7 @@ export class LifeIntelligenceService {
       this.txRepo.find({
         where: { createdBy: userId },
         order: { transactionDate: 'DESC', createdAt: 'DESC' },
-        take: 40,
+        take: 20,
       }),
     ]);
 
@@ -474,7 +434,7 @@ export class LifeIntelligenceService {
           balance: toNum(a.balance),
           currency: a.currency,
         })),
-        recentTransactions: recentTx.slice(0, 20).map((tx) => ({
+        recentTransactions: recentTx.map((tx) => ({
           type: tx.transactionType,
           amount: toNum(tx.amount),
           currency: tx.currency,

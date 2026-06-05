@@ -16,6 +16,7 @@ import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { ChangePasswordDto } from '../dto/change-password.dto';
 import { ResetPasswordDto } from '../dto/reset-password.dto';
 import { ActivityLogsService } from '../../../activity-logs/application/services/activity-logs.service';
+import { SettingsService } from '../../../settings/application/services/settings.service';
 import {
   ActivityAction,
   ActivityModule,
@@ -30,6 +31,7 @@ export class AuthService {
     private readonly usersRepo: Repository<User>,
     private readonly jwtService: JwtService,
     private readonly activityLogs: ActivityLogsService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -47,6 +49,7 @@ export class AuthService {
       createdBy: null,
     });
     const saved = await this.usersRepo.save(user);
+    await this.settingsService.getForUser(saved.id);
     await this.activityLogs.log({
       userId: saved.id,
       module: ActivityModule.AUTH,

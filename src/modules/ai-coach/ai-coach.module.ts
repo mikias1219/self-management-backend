@@ -18,6 +18,7 @@ import { Course } from '../learning/domain/entities/course.entity';
 import { LearningProject } from '../learning/domain/entities/learning-project.entity';
 import { StudySession } from '../learning/domain/entities/study-session.entity';
 import { JournalEntry } from '../journal/domain/entities/journal-entry.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Notification } from '../notifications/domain/entities/notification.entity';
 import { SpiritualActivity } from '../spiritual/domain/entities/spiritual-activity.entity';
 import { ProductivityModule } from '../productivity/productivity.module';
@@ -44,6 +45,7 @@ import { AiCoachController } from './presentation/controllers/ai-coach.controlle
     GoalsModule,
     JournalModule,
     FinanceModule,
+    NotificationsModule,
     TypeOrmModule.forFeature([
       AiCoachSession,
       Task,

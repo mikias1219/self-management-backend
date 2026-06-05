@@ -4,7 +4,6 @@ import { addDays, format } from 'date-fns';
 import { Between, In, Repository } from 'typeorm';
 import { AnalyticsPeriod } from '../../../../common/domain/enums/period.enum';
 import { resolveDateRange } from '../../../../common/utils/date-range.util';
-import { habitLogsInRange } from '../../../../common/utils/habit-logs.util';
 import { ActivityLog } from '../../../activity-logs/domain/entities/activity-log.entity';
 import { AchievementsService } from '../../../achievements/application/services/achievements.service';
 import { AnalyticsService } from '../../../analytics/application/services/analytics.service';
@@ -18,6 +17,7 @@ import { FinanceCyclesService } from '../../../finance/application/services/fina
 import { TransactionType } from '../../../finance/domain/enums/finance.enums';
 import { Goal } from '../../../goals/domain/entities/goal.entity';
 import { Habit } from '../../../habits/domain/entities/habit.entity';
+import { HabitLog } from '../../../habits/domain/entities/habit-log.entity';
 import { HealthLog } from '../../../health/domain/entities/health-log.entity';
 import { Book } from '../../../learning/domain/entities/book.entity';
 import { Course } from '../../../learning/domain/entities/course.entity';
@@ -93,6 +93,7 @@ export class AiChatContextService {
     private readonly financeCycles: FinanceCyclesService,
     @InjectRepository(Goal) private readonly goalsRepo: Repository<Goal>,
     @InjectRepository(Habit) private readonly habitsRepo: Repository<Habit>,
+    @InjectRepository(HabitLog) private readonly habitLogsRepo: Repository<HabitLog>,
     @InjectRepository(HealthLog) private readonly healthRepo: Repository<HealthLog>,
     @InjectRepository(DailyReview) private readonly reviewsRepo: Repository<DailyReview>,
     @InjectRepository(JournalEntry) private readonly journalRepo: Repository<JournalEntry>,
@@ -130,6 +131,7 @@ export class AiChatContextService {
       dueToday,
       openTasks,
       completedToday,
+      habitLogsToday,
       todayTransactions,
       accounts,
       budgets,
@@ -157,9 +159,8 @@ export class AiChatContextService {
       }),
       this.tasksRepo.find({
         where: { createdBy: userId, dueDate: timeBetween },
-        relations: { goal: true, habit: true },
         order: { priority: 'DESC', dueDate: 'ASC' },
-        take: 25,
+        take: 15,
       }),
       this.tasksRepo.find({
         where: {
@@ -170,9 +171,8 @@ export class AiChatContextService {
             TaskStatus.BLOCKED,
           ]),
         },
-        relations: { goal: true, habit: true },
         order: { dueDate: 'ASC', createdAt: 'DESC' },
-        take: 30,
+        take: 15,
       }),
       this.tasksRepo.find({
         where: {
@@ -180,9 +180,13 @@ export class AiChatContextService {
           taskStatus: TaskStatus.DONE,
           completedAt: timeBetween,
         },
-        relations: { goal: true, habit: true },
         order: { completedAt: 'DESC' },
-        take: 20,
+        take: 10,
+      }),
+      this.habitLogsRepo.find({
+        where: { createdBy: userId, completedAt: timeBetween },
+        order: { completedAt: 'DESC' },
+        take: 15,
       }),
       this.txRepo.find({
         where: { createdBy: userId, transactionDate: dateBetween },
@@ -201,13 +205,12 @@ export class AiChatContextService {
       this.goalsRepo.find({
         where: { createdBy: userId },
         order: { updatedAt: 'DESC' },
-        take: 20,
+        take: 10,
       }),
       this.habitsRepo.find({
         where: { createdBy: userId },
-        relations: { logs: true },
         order: { name: 'ASC' },
-        take: 25,
+        take: 15,
       }),
       this.healthRepo.find({
         where: { createdBy: userId, logDate: dateBetween },
@@ -241,12 +244,12 @@ export class AiChatContextService {
       this.booksRepo.find({
         where: { createdBy: userId },
         order: { updatedAt: 'DESC' },
-        take: 12,
+        take: 10,
       }),
       this.coursesRepo.find({
         where: { createdBy: userId },
         order: { updatedAt: 'DESC' },
-        take: 12,
+        take: 10,
       }),
       this.projectsRepo.find({
         where: { createdBy: userId },
@@ -264,16 +267,10 @@ export class AiChatContextService {
       this.activityLogsRepo.find({
         where: { userId, createdAt: timeBetween },
         order: { createdAt: 'DESC' },
-        take: 25,
+        take: 10,
       }),
       this.productivitySchedule.getSchedule(userId, 7, 'upcoming'),
     ]);
-
-    const habitLogsToday = habitLogsInRange(
-      habits,
-      dayRange.start,
-      dayRange.end,
-    );
 
     let todayExpense = 0;
     let todayIncome = 0;
@@ -333,7 +330,7 @@ export class AiChatContextService {
         googleCalendar: unifiedSchedule.googleCalendar,
         todayAndUpcoming: unifiedSchedule.items
           .filter((i) => new Date(i.start) <= addDays(new Date(), 2))
-          .slice(0, 40)
+          .slice(0, 20)
           .map((i) => ({
             kind: i.kind,
             title: i.title,

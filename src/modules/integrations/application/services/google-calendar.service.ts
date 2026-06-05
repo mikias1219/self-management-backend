@@ -51,6 +51,12 @@ export class GoogleCalendarService {
     return !!(clientId?.trim() && clientSecret?.trim());
   }
 
+  async isConnected(userId: string): Promise<boolean> {
+    const settings = await this.settingsService.getForUser(userId);
+    const gc = settings.integrations?.googleCalendar;
+    return !!gc?.connected && !!gc.refreshToken;
+  }
+
   getAuthUrl(userId: string): string {
     if (!this.isConfigured()) {
       throw new ServiceUnavailableException(

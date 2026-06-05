@@ -1,5 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject, Injectable } from '@nestjs/common';
+import type { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
+import { invalidateDashboardOverview } from '../../../../common/utils/dashboard-cache.util';
 import { startOfDay, subDays } from 'date-fns';
 import { DeepPartial, Repository } from 'typeorm';
 import { GoogleCalendarService } from '../../../integrations/application/services/google-calendar.service';
@@ -24,6 +27,7 @@ export class HabitsService extends BaseCrudService<Habit> {
     private readonly habitLogRepo: Repository<HabitLog>,
     activityLogs: ActivityLogsService,
     private readonly googleCalendar: GoogleCalendarService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {
     super(repository, activityLogs, {
       userId: '',
@@ -86,6 +90,9 @@ export class HabitsService extends BaseCrudService<Habit> {
     const recentDays = new Set(
       (habit.logs ?? []).map((l) => startOfDay(l.completedAt).getTime()),
     );
+    if (recentDays.has(completedDay.getTime())) {
+      return saved;
+    }
     const hadYesterday = recentDays.has(yesterday.getTime());
     const nextStreak = hadYesterday ? habit.currentStreak + 1 : 1;
     habit.currentStreak = nextStreak;
@@ -111,6 +118,7 @@ export class HabitsService extends BaseCrudService<Habit> {
         metadata: { streak: nextStreak },
       });
     }
+    await invalidateDashboardOverview(this.cache, userId);
     return saved;
   }
 

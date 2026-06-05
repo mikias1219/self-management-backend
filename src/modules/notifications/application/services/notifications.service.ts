@@ -25,4 +25,19 @@ export class NotificationsService extends BaseCrudService<Notification> {
       where: { createdBy: userId, isRead: false },
     });
   }
+
+  async notifyUser(
+    userId: string,
+    input: { title: string; message: string; link?: string },
+  ): Promise<Notification> {
+    return this.create(
+      {
+        title: input.title,
+        message: input.message,
+        link: input.link,
+        isRead: false,
+      },
+      userId,
+    );
+  }
 }

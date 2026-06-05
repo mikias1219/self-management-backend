@@ -15,6 +15,8 @@ import {
 
 type CoachMessage = { role: string; content: string; createdAt: string };
 
+const MAX_STORED_MESSAGES = 100;
+
 interface OpenAiToolCall {
   id: string;
   type: 'function';
@@ -133,7 +135,9 @@ export class AiChatService {
       content: reply,
       createdAt: new Date().toISOString(),
     };
-    const updatedMessages = [...history, userMsg, assistantMsg];
+    const updatedMessages = [...history, userMsg, assistantMsg].slice(
+      -MAX_STORED_MESSAGES,
+    );
 
     if (!session) {
       session = this.sessionsRepo.create({
@@ -180,7 +184,9 @@ export class AiChatService {
       content: result.ok ? `Done — ${result.message}` : `Couldn't do that — ${result.message}`,
       createdAt: new Date().toISOString(),
     };
-    session.messages = [...(session.messages ?? []), note];
+    session.messages = [...(session.messages ?? []), note].slice(
+      -MAX_STORED_MESSAGES,
+    );
     const saved = await this.sessionsRepo.save(session);
 
     return {

@@ -30,6 +30,19 @@ export class DailyReviewsController {
     return this.service.findAllForUser(user.sub);
   }
 
+  @Get('today')
+  findToday(@CurrentUser() user: AuthUserPayload) {
+    return this.service.findToday(user.sub);
+  }
+
+  @Post('today')
+  upsertToday(
+    @CurrentUser() user: AuthUserPayload,
+    @Body() dto: UpdateDailyReviewDto,
+  ) {
+    return this.service.upsertToday(user.sub, dto);
+  }
+
   @Get(':id')
   findOne(@CurrentUser() user: AuthUserPayload, @Param('id') id: string) {
     return this.service.findOneForUser(user.sub, id);

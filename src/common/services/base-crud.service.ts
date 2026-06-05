@@ -53,6 +53,7 @@ export abstract class BaseCrudService<T extends BaseEntity> {
     });
   }
 
+  /** Soft-deleted rows (@DeleteDateColumn) are excluded automatically by TypeORM find(). */
   async findAllForUser(
     userId: string,
     options?: FindManyOptions<T>,
