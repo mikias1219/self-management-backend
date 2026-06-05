@@ -18,3 +18,14 @@ export enum ExpenseClassificationType {
   DISCRETIONARY = 'discretionary',
   SAVINGS_TRANSFER = 'savings_transfer',
 }
+
+export enum FinanceCycleStatus {
+  OPEN = 'open',
+  CLOSED = 'closed',
+}
+
+export enum PendingObligationStatus {
+  PENDING = 'pending',
+  PAID = 'paid',
+  OVERDUE = 'overdue',
+}

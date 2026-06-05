@@ -25,4 +25,11 @@ export class UserSettings extends BaseEntity {
 
   @Column({ type: 'jsonb', nullable: true })
   integrations?: UserIntegrations;
+
+  /**
+   * Day-of-month when salary typically arrives (1-28/29/30/31).
+   * Finance cycles are anchored to this day.
+   */
+  @Column({ type: 'int', default: 25 })
+  salaryDay: number;
 }

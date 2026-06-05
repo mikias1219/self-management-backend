@@ -14,6 +14,7 @@ import { EnglishPractice } from '../../../english/domain/entities/english-practi
 import { FinanceAccount } from '../../../finance/domain/entities/account.entity';
 import { FinanceBudget } from '../../../finance/domain/entities/budget.entity';
 import { FinanceTransaction } from '../../../finance/domain/entities/transaction.entity';
+import { FinanceCyclesService } from '../../../finance/application/services/finance-cycles.service';
 import { TransactionType } from '../../../finance/domain/enums/finance.enums';
 import { Goal } from '../../../goals/domain/entities/goal.entity';
 import { Habit } from '../../../habits/domain/entities/habit.entity';
@@ -89,6 +90,7 @@ export class AiChatContextService {
     private readonly accountsRepo: Repository<FinanceAccount>,
     @InjectRepository(FinanceBudget)
     private readonly budgetsRepo: Repository<FinanceBudget>,
+    private readonly financeCycles: FinanceCyclesService,
     @InjectRepository(Goal) private readonly goalsRepo: Repository<Goal>,
     @InjectRepository(Habit) private readonly habitsRepo: Repository<Habit>,
     @InjectRepository(HealthLog) private readonly healthRepo: Repository<HealthLog>,
@@ -293,6 +295,11 @@ export class AiChatContextService {
     const loggedHabitIds = new Set(habitLogsToday.map((l) => l.habitId));
     const primaryCurrency = accounts[0]?.currency ?? 'ETB';
 
+    const currentCycle = await this.financeCycles.getCurrent(userId);
+    const obligations = currentCycle
+      ? await this.financeCycles.getObligationSummary(userId, currentCycle.id)
+      : { upcoming: [], overdue: [], paid: [] };
+
     const [achievementsToday, achievementsWeek] = await Promise.all([
       this.achievementsService.getSnapshot(userId, {
         period: AnalyticsPeriod.DAY,
@@ -407,6 +414,23 @@ export class AiChatContextService {
           remaining: toNum(b.amount) - toNum(b.spent),
           period: `${b.periodStart} → ${b.periodEnd}`,
         })),
+        currentCycle: currentCycle
+          ? {
+              startDate: currentCycle.startDate,
+              endDate: currentCycle.endDate,
+              netSalary: toNum(currentCycle.netSalary),
+              spendingBudget: toNum(currentCycle.spendingBudget),
+              totalVariableSpent: toNum(currentCycle.totalVariableSpent),
+              unspentBudget: Math.max(
+                0,
+                toNum(currentCycle.spendingBudget) -
+                  toNum(currentCycle.totalVariableSpent),
+              ),
+              savingsShortfall: toNum(currentCycle.savingsShortfall),
+              financialHealthScore: currentCycle.financialHealthScore,
+              overdueObligations: obligations.overdue.length,
+            }
+          : null,
       },
       learning: {
         api: '/learning',

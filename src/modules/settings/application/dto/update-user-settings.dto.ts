@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsObject, IsOptional, IsString } from 'class-validator';
+import { IsInt, IsObject, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class UpdateUserSettingsDto {
   @ApiPropertyOptional()
@@ -36,4 +36,17 @@ export class UpdateUserSettingsDto {
   @IsOptional()
   @IsObject()
   integrations?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description:
+      'Day of month when salary arrives; finance cycles are salaryDay..salaryDay-1',
+    default: 25,
+    minimum: 1,
+    maximum: 31,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  salaryDay?: number;
 }

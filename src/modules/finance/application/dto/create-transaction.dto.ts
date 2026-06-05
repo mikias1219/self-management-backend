@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -19,13 +20,65 @@ export class CreateTransactionDto {
   @IsUUID()
   accountId: string;
 
+  @ApiPropertyOptional({
+    description: 'Destination account for transfers.',
+  })
+  @IsOptional()
+  @IsUUID()
+  toAccountId?: string;
+
   @ApiProperty({ enum: TransactionType })
   @IsEnum(TransactionType)
   transactionType: TransactionType;
 
   @ApiProperty()
+  @Type(() => Number)
   @IsNumber()
   amount: number;
+
+  @ApiPropertyOptional({ description: 'Gross salary (income + salary source)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  grossAmount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  taxDeducted?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  pensionDeducted?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  netAmount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  needsReview?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isCorrection?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  correctionReason?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  pendingObligationId?: string;
 
   @ApiPropertyOptional({ default: 'ETB' })
   @IsOptional()

@@ -8,6 +8,7 @@ import {
 } from '../../../../common/domain/enums/activity-action.enum';
 import { BaseCrudService } from '../../../../common/services/base-crud.service';
 import { ActivityLogsService } from '../../../activity-logs/application/services/activity-logs.service';
+import { LifeArea } from '../../../../common/domain/enums/life-area.enum';
 import { Goal } from '../../../goals/domain/entities/goal.entity';
 import { GoogleCalendarService } from '../../../integrations/application/services/google-calendar.service';
 import { Task } from '../../domain/entities/task.entity';
@@ -209,6 +210,13 @@ export class TasksService extends BaseCrudService<Task> {
     const pct =
       planned > 0 ? Math.round((achieved / planned) * 100) : achieved > 0 ? 100 : 0;
 
+    const financialKeywords =
+      /\b(pay|bill|rent|loan|utility|electricity|subscription|transfer|save|savings)\b/i;
+    const suggestRecordTransaction =
+      task.lifeArea === LifeArea.FINANCE ||
+      financialKeywords.test(task.title) ||
+      financialKeywords.test(task.description ?? '');
+
     await this.activityLogs.log({
       userId,
       module: ActivityModule.TASKS,
@@ -226,6 +234,7 @@ export class TasksService extends BaseCrudService<Task> {
         fulfillmentPercent: pct,
         notes,
         completedAt: task.completedAt,
+        suggestRecordTransaction,
       },
     });
   }

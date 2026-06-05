@@ -5,6 +5,7 @@ import { PaymentMethod } from '../../../../common/domain/enums/payment-method.en
 import { RecurringInterval } from '../../../../common/domain/enums/recurring-interval.enum';
 import { BaseEntity } from '../../../../common/domain/base.entity';
 import { TransactionType } from '../enums/finance.enums';
+import { ExpenseCategory } from './expense-category.entity';
 import { SavingsGoal } from './savings-goal.entity';
 
 @Entity('finance_transactions')
@@ -25,6 +26,34 @@ export class FinanceTransaction extends BaseEntity {
   @Column({ type: 'decimal', precision: 14, scale: 2 })
   amount: number;
 
+  /** Salary breakdown (income + incomeSource=salary). amount should equal netAmount. */
+  @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true })
+  grossAmount?: number;
+
+  @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true })
+  taxDeducted?: number;
+
+  @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true })
+  pensionDeducted?: number;
+
+  @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true })
+  netAmount?: number;
+
+  @Column({ default: false })
+  needsReview: boolean;
+
+  @Column({ default: false })
+  isCorrection: boolean;
+
+  @Column({ nullable: true })
+  correctionReason?: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  cycleId?: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  pendingObligationId?: string;
+
   @Column({ type: 'varchar', length: 8, default: 'ETB' })
   currency: string;
 
@@ -36,6 +65,13 @@ export class FinanceTransaction extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   categoryId?: string;
+
+  @ManyToOne(() => ExpenseCategory, (cat) => cat.transactions, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'categoryId' })
+  expenseCategory?: ExpenseCategory;
 
   @Column({ type: 'enum', enum: IncomeSource, nullable: true })
   incomeSource?: IncomeSource;
@@ -55,6 +91,10 @@ export class FinanceTransaction extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   linkedTaskId?: string;
+
+  /** Destination account for TRANSFER transactions. */
+  @Column({ type: 'uuid', nullable: true })
+  toAccountId?: string;
 
   @Column({ type: 'uuid', nullable: true })
   savingsGoalId?: string;

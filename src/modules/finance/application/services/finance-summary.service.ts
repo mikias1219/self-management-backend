@@ -6,7 +6,6 @@ import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
 import { resolveDateRange } from '../../../../common/utils/date-range.util';
 import { FinanceAccount } from '../../domain/entities/account.entity';
 import { FinanceBudget } from '../../domain/entities/budget.entity';
-import { ExpenseCategory } from '../../domain/entities/expense-category.entity';
 import { IncomeCategory } from '../../domain/entities/income-category.entity';
 import { SavingsGoal } from '../../domain/entities/savings-goal.entity';
 import { FinanceTransaction } from '../../domain/entities/transaction.entity';
@@ -14,7 +13,9 @@ import {
   ExpenseClassificationType,
   TransactionType,
 } from '../../domain/enums/finance.enums';
+import { FinanceCycle } from '../../domain/entities/finance-cycle.entity';
 import { BudgetsService } from './budgets.service';
+import { FinanceCyclesService } from './finance-cycles.service';
 
 function toNum(v: unknown): number {
   return Number(v ?? 0);
@@ -31,11 +32,12 @@ export class FinanceSummaryService {
     private readonly budgetsRepo: Repository<FinanceBudget>,
     @InjectRepository(SavingsGoal)
     private readonly savingsRepo: Repository<SavingsGoal>,
-    @InjectRepository(ExpenseCategory)
-    private readonly expenseCatRepo: Repository<ExpenseCategory>,
     @InjectRepository(IncomeCategory)
     private readonly incomeCatRepo: Repository<IncomeCategory>,
+    @InjectRepository(FinanceCycle)
+    private readonly cyclesRepo: Repository<FinanceCycle>,
     private readonly budgetsService: BudgetsService,
+    private readonly financeCycles: FinanceCyclesService,
   ) {}
 
   async getSummary(userId: string, query: DateRangeQueryDto) {
@@ -47,16 +49,16 @@ export class FinanceSummaryService {
       format(range.end, 'yyyy-MM-dd'),
     );
 
-    const [accounts, transactions, budgets, savingsGoals, expenseCats, incomeCats] =
+    const [accounts, transactions, budgets, savingsGoals, incomeCats] =
       await Promise.all([
         this.accountsRepo.find({ where: { createdBy: userId } }),
         this.txRepo.find({
           where: { createdBy: userId, transactionDate: between },
+          relations: { expenseCategory: true },
           order: { transactionDate: 'ASC' },
         }),
         this.budgetsRepo.find({ where: { createdBy: userId } }),
         this.savingsRepo.find({ where: { createdBy: userId } }),
-        this.expenseCatRepo.find({ where: { createdBy: userId } }),
         this.incomeCatRepo.find({ where: { createdBy: userId } }),
       ]);
 
@@ -68,14 +70,12 @@ export class FinanceSummaryService {
     const expenseByCategory = new Map<string, number>();
     const incomeByCategory = new Map<string, number>();
     const dailyFlow = new Map<string, { income: number; expense: number }>();
+    const expenseCatNames = new Map<string, string>();
 
-    const classificationByCategoryId = new Map(
-      expenseCats.map((c) => [c.id, c.classificationType]),
-    );
     const isVariableExpenseTx = (tx: FinanceTransaction): boolean => {
       if (tx.transactionType !== TransactionType.EXPENSE) return false;
       if (!tx.categoryId) return true; // uncategorized -> treated as variable
-      const cls = classificationByCategoryId.get(tx.categoryId);
+      const cls = tx.expenseCategory?.classificationType;
       return (
         cls === ExpenseClassificationType.VARIABLE_NECESSITY ||
         cls === ExpenseClassificationType.DISCRETIONARY ||
@@ -98,6 +98,9 @@ export class FinanceSummaryService {
         if (isVariableExpenseTx(tx)) totalVariableExpense += amount;
         dayEntry.expense += amount;
         const key = tx.categoryId ?? 'uncategorized';
+        if (tx.categoryId && tx.expenseCategory) {
+          expenseCatNames.set(tx.categoryId, tx.expenseCategory.name);
+        }
         expenseByCategory.set(key, (expenseByCategory.get(key) ?? 0) + amount);
       } else {
         totalTransfer += amount;
@@ -145,9 +148,26 @@ export class FinanceSummaryService {
 
     const catName = (id: string, type: 'income' | 'expense') => {
       if (id === 'uncategorized') return 'Uncategorized';
-      const list = type === 'income' ? incomeCats : expenseCats;
-      return list.find((c) => c.id === id)?.name ?? 'Unknown';
+      if (type === 'expense') return expenseCatNames.get(id) ?? 'Unknown';
+      return incomeCats.find((c) => c.id === id)?.name ?? 'Unknown';
     };
+
+    const currentCycle = await this.financeCycles.getCurrent(userId);
+    const subBudgetTotal = budgets
+      .filter(
+        (b) =>
+          currentCycle &&
+          b.periodStart >= currentCycle.startDate &&
+          b.periodEnd <= currentCycle.endDate,
+      )
+      .reduce((s, b) => s + toNum(b.amount), 0);
+    const remainingUnallocated = currentCycle
+      ? this.financeCycles.getRemainingUnallocated(currentCycle, subBudgetTotal)
+      : 0;
+
+    const obligations = currentCycle
+      ? await this.financeCycles.getObligationSummary(userId, currentCycle.id)
+      : { upcoming: [], overdue: [], paid: [] };
 
     return {
       period: query,
@@ -187,18 +207,74 @@ export class FinanceSummaryService {
       savingsGoals: savingsGoals.map((g) => {
         const target = toNum(g.targetAmount);
         const current = toNum(g.currentAmount);
+        const monthly = toNum(g.monthlyTargetAmount);
         const progressPercent =
           target > 0 ? Math.round((current / target) * 1000) / 10 : 0;
+        const remaining = Math.max(0, target - current);
+        const projectedCompletionDate =
+          monthly > 0 && remaining > 0
+            ? (() => {
+                const d = new Date();
+                d.setMonth(d.getMonth() + Math.ceil(remaining / monthly));
+                return d.toISOString().slice(0, 10);
+              })()
+            : undefined;
         return {
           id: g.id,
           name: g.name,
           targetAmount: target,
           currentAmount: current,
-          remaining: Math.max(0, target - current),
+          monthlyTargetAmount: monthly,
+          savingsShortfallCarryForward: toNum(g.savingsShortfallCarryForward),
+          remaining,
           progressPercent,
           targetDate: g.targetDate,
+          projectedCompletionDate,
         };
       }),
+      currentCycle: currentCycle
+        ? {
+            id: currentCycle.id,
+            startDate: currentCycle.startDate,
+            endDate: currentCycle.endDate,
+            status: currentCycle.cycleStatus,
+            grossSalary: toNum(currentCycle.grossSalary),
+            netSalary: toNum(currentCycle.netSalary),
+            fixedObligations: toNum(currentCycle.fixedObligations),
+            savingsTarget: toNum(currentCycle.savingsTarget),
+            spendingBudget: toNum(currentCycle.spendingBudget),
+            totalFixedObligations: toNum(currentCycle.totalFixedObligations),
+            totalSavingsAllocated: toNum(currentCycle.totalSavingsAllocated),
+            totalVariableSpent: toNum(currentCycle.totalVariableSpent),
+            remainingBalance: toNum(currentCycle.remainingBalance),
+            savingsShortfall: toNum(currentCycle.savingsShortfall),
+            financialHealthScore: currentCycle.financialHealthScore,
+            remainingUnallocated,
+          }
+        : null,
+      obligations: {
+        upcoming: obligations.upcoming.map((o) => ({
+          id: o.id,
+          name: o.name,
+          expectedAmount: toNum(o.expectedAmount),
+          dueDate: o.dueDate,
+          status: o.obligationStatus,
+        })),
+        overdue: obligations.overdue.map((o) => ({
+          id: o.id,
+          name: o.name,
+          expectedAmount: toNum(o.expectedAmount),
+          dueDate: o.dueDate,
+          status: o.obligationStatus,
+        })),
+        paidThisCycle: obligations.paid.map((o) => ({
+          id: o.id,
+          name: o.name,
+          expectedAmount: toNum(o.expectedAmount),
+          dueDate: o.dueDate,
+          status: o.obligationStatus,
+        })),
+      },
       expenseByCategory: [...expenseByCategory.entries()].map(([id, amount]) => ({
         categoryId: id,
         name: catName(id, 'expense'),

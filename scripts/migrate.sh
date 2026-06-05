@@ -7,7 +7,7 @@
 #
 set -euo pipefail
 
-cd "$(dirname "$0")/../backend"
+cd "$(dirname "$0")/.."
 
 case "${1:-up}" in
   up)

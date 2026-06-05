@@ -10,6 +10,11 @@ export class CreateSavingsGoalDto {
   @IsNumber()
   targetAmount: number;
 
+  @ApiPropertyOptional({ description: 'Monthly savings commitment toward this goal' })
+  @IsOptional()
+  @IsNumber()
+  monthlyTargetAmount?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()

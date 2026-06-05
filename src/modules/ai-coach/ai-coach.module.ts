@@ -7,6 +7,7 @@ import { DailyReview } from '../daily-reviews/domain/entities/daily-review.entit
 import { EnglishPractice } from '../english/domain/entities/english-practice.entity';
 import { FinanceAccount } from '../finance/domain/entities/account.entity';
 import { FinanceBudget } from '../finance/domain/entities/budget.entity';
+import { FinanceCycle } from '../finance/domain/entities/finance-cycle.entity';
 import { FinanceTransaction } from '../finance/domain/entities/transaction.entity';
 import { Goal } from '../goals/domain/entities/goal.entity';
 import { HabitLog } from '../habits/domain/entities/habit-log.entity';
@@ -49,6 +50,7 @@ import { AiCoachController } from './presentation/controllers/ai-coach.controlle
       FinanceTransaction,
       FinanceAccount,
       FinanceBudget,
+      FinanceCycle,
       Goal,
       Habit,
       HabitLog,
