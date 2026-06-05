@@ -68,13 +68,16 @@ export class FinanceCyclesService {
     return cycle;
   }
 
-  async getCurrent(userId: string): Promise<FinanceCycle | null> {
-    const cycle = await this.cyclesRepo.findOne({
+  async findOpenCycle(userId: string): Promise<FinanceCycle | null> {
+    return this.cyclesRepo.findOne({
       where: { createdBy: userId, cycleStatus: FinanceCycleStatus.OPEN },
       order: { startDate: 'DESC' },
     });
-    if (!cycle) return null;
-    return this.refreshCycleTotals(userId, cycle);
+  }
+
+  /** Read-only: returns the open cycle without recomputing totals. */
+  async getCurrent(userId: string): Promise<FinanceCycle | null> {
+    return this.findOpenCycle(userId);
   }
 
   private async getSalaryDay(userId: string): Promise<number> {
@@ -193,19 +196,23 @@ export class FinanceCyclesService {
         obligationStatus: PendingObligationStatus.PENDING,
       },
     });
+    const toMarkOverdue: PendingObligation[] = [];
     for (const o of pending) {
       if (o.dueDate <= grace) {
         o.obligationStatus = PendingObligationStatus.OVERDUE;
-        await this.pendingRepo.save(o);
+        toMarkOverdue.push(o);
       } else if (o.dueDate < today) {
         // still within grace — keep pending until dueDay+3
         const due = parseISO(o.dueDate);
         const overdueAfter = format(addDays(due, 3), 'yyyy-MM-dd');
         if (today > overdueAfter) {
           o.obligationStatus = PendingObligationStatus.OVERDUE;
-          await this.pendingRepo.save(o);
+          toMarkOverdue.push(o);
         }
       }
+    }
+    if (toMarkOverdue.length > 0) {
+      await this.pendingRepo.save(toMarkOverdue);
     }
   }
 
@@ -376,7 +383,7 @@ export class FinanceCyclesService {
     const startStr = format(start, 'yyyy-MM-dd');
     const endStr = this.cycleEndFromStart(start, salaryDay);
 
-    const existingOpen = await this.getCurrent(userId);
+    const existingOpen = await this.findOpenCycle(userId);
     let hadSalaryAlready = false;
 
     if (existingOpen) {

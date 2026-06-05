@@ -1,18 +1,35 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TaskStatus } from '../../../tasks/domain/enums/task.enums';
 import { Task } from '../../../tasks/domain/entities/task.entity';
 import { LifeIntelligenceService } from '../../../analytics/application/services/life-intelligence.service';
 
+const OVERVIEW_CACHE_TTL_MS = 60_000;
+
 @Injectable()
 export class DashboardService {
   constructor(
     @InjectRepository(Task) private readonly tasksRepo: Repository<Task>,
     private readonly intelligence: LifeIntelligenceService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   async getOverview(userId: string) {
+    const cacheKey = `dashboard:overview:${userId}`;
+    const cached = await this.cache.get<Awaited<ReturnType<typeof this.buildOverview>>>(
+      cacheKey,
+    );
+    if (cached) return cached;
+
+    const result = await this.buildOverview(userId);
+    await this.cache.set(cacheKey, result, OVERVIEW_CACHE_TTL_MS);
+    return result;
+  }
+
+  private async buildOverview(userId: string) {
     const snapshot = await this.intelligence.getUnifiedIntelligence(userId);
 
     const recentTasks = await this.tasksRepo.find({

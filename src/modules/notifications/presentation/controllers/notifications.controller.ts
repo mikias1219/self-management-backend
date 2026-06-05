@@ -30,6 +30,11 @@ export class NotificationsController {
     return this.service.findAllForUser(user.sub);
   }
 
+  @Get('unread-count')
+  unreadCount(@CurrentUser() user: AuthUserPayload) {
+    return this.service.countUnread(user.sub).then((count) => ({ count }));
+  }
+
   @Get(':id')
   findOne(@CurrentUser() user: AuthUserPayload, @Param('id') id: string) {
     return this.service.findOneForUser(user.sub, id);

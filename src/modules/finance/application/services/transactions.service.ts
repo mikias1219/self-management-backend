@@ -173,7 +173,7 @@ export class TransactionsService extends BaseCrudService<FinanceTransaction> {
     this.validateSavingsTransfer(normalized);
     await this.validateTransferAccounts(userId, normalized);
 
-    const currentCycle = await this.financeCycles.getCurrent(userId);
+    const currentCycle = await this.financeCycles.findOpenCycle(userId);
     if (currentCycle && !normalized.isCorrection) {
       normalized.cycleId = currentCycle.id;
     }

@@ -19,4 +19,10 @@ export class NotificationsService extends BaseCrudService<Notification> {
       entityType: 'Notification',
     });
   }
+
+  countUnread(userId: string): Promise<number> {
+    return this.repository.count({
+      where: { createdBy: userId, isRead: false },
+    });
+  }
 }
