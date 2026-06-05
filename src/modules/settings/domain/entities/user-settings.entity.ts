@@ -1,5 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../../../common/domain/base.entity';
+import type { UserIntegrations } from '../types/user-integrations.type';
 
 @Entity('user_settings')
 @Index(['createdBy'], { unique: true })
@@ -21,4 +22,7 @@ export class UserSettings extends BaseEntity {
 
   @Column({ type: 'jsonb', nullable: true })
   modulePreferences?: Record<string, unknown>;
+
+  @Column({ type: 'jsonb', nullable: true })
+  integrations?: UserIntegrations;
 }

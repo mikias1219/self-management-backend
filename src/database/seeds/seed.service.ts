@@ -226,7 +226,7 @@ export class SeedService implements OnModuleInit {
         name: 'Main Checking',
         accountType: AccountType.CHECKING,
         balance: 5000,
-        currency: 'USD',
+        currency: 'ETB',
         createdBy: userId,
         status: EntityStatus.ACTIVE,
       }),
@@ -345,11 +345,19 @@ export class SeedService implements OnModuleInit {
 
     await this.settingsRepo.save(
       this.settingsRepo.create({
-        timezone: 'UTC',
+        timezone: this.config.get<string>('calendar.defaultTimezone') ?? 'Africa/Nairobi',
         locale: 'en',
         theme: 'light',
         modulePreferences: { accentColor: 'teal' },
         notificationPreferences: { email: true, push: false },
+        integrations: {
+          calendarFeed: {
+            embedSrc: this.config.get<string>('calendar.defaultEmbedSrc') || undefined,
+            icalFeedUrl: this.config.get<string>('calendar.defaultIcalUrl') || undefined,
+            timezone:
+              this.config.get<string>('calendar.defaultTimezone') ?? 'Africa/Nairobi',
+          },
+        },
         createdBy: userId,
         status: EntityStatus.ACTIVE,
       }),

@@ -20,6 +20,8 @@ import { HealthModule } from './modules/health/health.module';
 import { JournalModule } from './modules/journal/journal.module';
 import { LearningModule } from './modules/learning/learning.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { ProductivityModule } from './modules/productivity/productivity.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { SpiritualModule } from './modules/spiritual/spiritual.module';
 import { TasksModule } from './modules/tasks/tasks.module';
@@ -48,6 +50,8 @@ import { AppService } from './app.service';
     SettingsModule,
     AiCoachModule,
     AnalyticsModule,
+    IntegrationsModule,
+    ProductivityModule,
     AchievementsModule,
     DashboardModule,
     SeedModule,

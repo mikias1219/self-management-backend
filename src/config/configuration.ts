@@ -18,7 +18,21 @@ export default () => ({
     port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
   },
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
+  /** Public base URL for calendar subscribe links (e.g. https://api.yourdomain.com) */
+  apiPublicUrl: process.env.API_PUBLIC_URL ?? '',
   seedOnStart: process.env.SEED_ON_START === 'true',
   openApiKey: process.env.OPEN_API_KEY ?? '',
   openAiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    redirectUri:
+      process.env.GOOGLE_REDIRECT_URI ??
+      'http://localhost:3000/settings/google-callback',
+  },
+  calendar: {
+    defaultEmbedSrc: process.env.DEFAULT_CALENDAR_EMBED_SRC ?? '',
+    defaultIcalUrl: process.env.DEFAULT_CALENDAR_ICAL_URL ?? '',
+    defaultTimezone: process.env.DEFAULT_CALENDAR_TIMEZONE ?? 'Africa/Nairobi',
+  },
 });

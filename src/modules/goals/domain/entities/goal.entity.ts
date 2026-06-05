@@ -1,4 +1,5 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import { LifeArea } from '../../../../common/domain/enums/life-area.enum';
 import { BaseEntity } from '../../../../common/domain/base.entity';
 import { GoalLevel } from '../enums/goal.enums';
 
@@ -33,4 +34,16 @@ export class Goal extends BaseEntity {
 
   @Column({ type: 'varchar', nullable: true })
   category?: string;
+
+  @Column({ type: 'enum', enum: LifeArea, nullable: true })
+  lifeArea?: LifeArea;
+
+  @Column({ type: 'float', nullable: true })
+  measurableTarget?: number;
+
+  @Column({ default: true })
+  syncToCalendar: boolean;
+
+  @Column({ nullable: true })
+  googleCalendarEventId?: string;
 }

@@ -15,6 +15,7 @@ import {
 } from '../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 import { ChatMessageDto } from '../../application/dto/chat-message.dto';
+import { ConfirmActionDto } from '../../application/dto/confirm-action.dto';
 import { CreateAiCoachSessionDto } from '../../application/dto/create-ai-coach-session.dto';
 import { UpdateAiCoachSessionDto } from '../../application/dto/update-ai-coach-session.dto';
 import { AiChatService } from '../../application/services/ai-chat.service';
@@ -33,6 +34,19 @@ export class AiCoachController {
   @Post('chat')
   chat(@CurrentUser() user: AuthUserPayload, @Body() dto: ChatMessageDto) {
     return this.aiChat.chat(user.sub, dto.message, dto.sessionId);
+  }
+
+  @Post('action')
+  confirmAction(
+    @CurrentUser() user: AuthUserPayload,
+    @Body() dto: ConfirmActionDto,
+  ) {
+    return this.aiChat.confirmAction(user.sub, dto.sessionId, {
+      id: dto.id ?? dto.tool,
+      tool: dto.tool,
+      label: dto.label ?? dto.tool,
+      args: dto.args ?? {},
+    });
   }
 
   @Get()

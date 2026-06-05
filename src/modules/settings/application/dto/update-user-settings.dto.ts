@@ -31,4 +31,9 @@ export class UpdateUserSettingsDto {
   @IsOptional()
   @IsObject()
   modulePreferences?: Record<string, unknown>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  integrations?: Record<string, unknown>;
 }

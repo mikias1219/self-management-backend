@@ -8,6 +8,7 @@ import {
 import { EntityStatus } from '../../../../common/domain/enums/entity-status.enum';
 import { BaseCrudService } from '../../../../common/services/base-crud.service';
 import { ActivityLogsService } from '../../../activity-logs/application/services/activity-logs.service';
+import { GoogleCalendarService } from '../../../integrations/application/services/google-calendar.service';
 import { Goal } from '../../domain/entities/goal.entity';
 import { CreateGoalDto } from '../dto/create-goal.dto';
 
@@ -19,6 +20,7 @@ export class GoalsService extends BaseCrudService<Goal> {
     @InjectRepository(Goal)
     repository: Repository<Goal>,
     activityLogs: ActivityLogsService,
+    private readonly googleCalendar: GoogleCalendarService,
   ) {
     super(repository, activityLogs, {
       userId: '',
@@ -34,7 +36,12 @@ export class GoalsService extends BaseCrudService<Goal> {
         throw new BadRequestException('Parent goal cannot be a sub-goal');
       }
     }
-    return super.create(dto as DeepPartial<Goal>, userId);
+    let saved = await super.create(dto as DeepPartial<Goal>, userId);
+    saved = await this.googleCalendar.syncGoal(userId, saved);
+    if (saved.googleCalendarEventId) {
+      saved = await this.repository.save(saved);
+    }
+    return saved;
   }
 
   override async update(
@@ -54,7 +61,7 @@ export class GoalsService extends BaseCrudService<Goal> {
       patch.status = EntityStatus.COMPLETED;
     }
 
-    const saved = await super.update(id, patch, userId);
+    let saved = await super.update(id, patch, userId);
 
     if (
       (saved.progress ?? 0) >= 100 &&
@@ -71,6 +78,17 @@ export class GoalsService extends BaseCrudService<Goal> {
       });
     }
 
+    saved = await this.googleCalendar.syncGoal(userId, saved);
+    if (saved.googleCalendarEventId !== existing.googleCalendarEventId) {
+      saved = await this.repository.save(saved);
+    }
+
     return saved;
+  }
+
+  override async remove(id: string, userId: string): Promise<void> {
+    const existing = await this.findOneForUser(userId, id);
+    await this.googleCalendar.removeGoalEvent(userId, existing);
+    await super.remove(id, userId);
   }
 }

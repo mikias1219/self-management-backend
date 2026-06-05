@@ -3,57 +3,70 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TaskStatus } from '../../../tasks/domain/enums/task.enums';
 import { Task } from '../../../tasks/domain/entities/task.entity';
-import { Goal } from '../../../goals/domain/entities/goal.entity';
-import { Habit } from '../../../habits/domain/entities/habit.entity';
-import { Notification } from '../../../notifications/domain/entities/notification.entity';
-import { AnalyticsService } from '../../../analytics/application/services/analytics.service';
-import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
-import { AnalyticsPeriod } from '../../../../common/domain/enums/period.enum';
+import { LifeIntelligenceService } from '../../../analytics/application/services/life-intelligence.service';
 
 @Injectable()
 export class DashboardService {
   constructor(
     @InjectRepository(Task) private readonly tasksRepo: Repository<Task>,
-    @InjectRepository(Goal) private readonly goalsRepo: Repository<Goal>,
-    @InjectRepository(Habit) private readonly habitsRepo: Repository<Habit>,
-    @InjectRepository(Notification) private readonly notificationsRepo: Repository<Notification>,
-    private readonly analyticsService: AnalyticsService,
+    private readonly intelligence: LifeIntelligenceService,
   ) {}
 
   async getOverview(userId: string) {
-    const todayQuery: DateRangeQueryDto = { period: AnalyticsPeriod.DAY };
-    const analytics = await this.analyticsService.getCountsByPeriod(userId, todayQuery);
-
-    const [pendingTasks, activeGoals, activeHabits, unreadNotifications] =
-      await Promise.all([
-        this.tasksRepo.count({
-          where: {
-            createdBy: userId,
-            taskStatus: TaskStatus.TODO,
-          },
-        }),
-        this.goalsRepo.count({ where: { createdBy: userId } }),
-        this.habitsRepo.count({ where: { createdBy: userId } }),
-        this.notificationsRepo.count({
-          where: { createdBy: userId, isRead: false },
-        }),
-      ]);
+    const snapshot = await this.intelligence.getUnifiedIntelligence(userId);
 
     const recentTasks = await this.tasksRepo.find({
       where: { createdBy: userId },
-      order: { createdAt: 'DESC' },
+      order: { updatedAt: 'DESC' },
       take: 5,
     });
 
-    return {
-      summary: {
-        pendingTasks,
-        activeGoals,
-        activeHabits,
-        unreadNotifications,
+    const pendingTasks = await this.tasksRepo.count({
+      where: {
+        createdBy: userId,
+        taskStatus: TaskStatus.TODO,
       },
-      todayActivity: analytics.counts,
+    });
+
+    const inProgressTasks = await this.tasksRepo.count({
+      where: {
+        createdBy: userId,
+        taskStatus: TaskStatus.IN_PROGRESS,
+      },
+    });
+
+    return {
+      todayFocus: {
+        tasks: snapshot.tasks.focusToday,
+        spendingToday: snapshot.finance.weekly.expense,
+        habitsCompletionRate: snapshot.habits.completionRateToday,
+        studyMinutes: snapshot.learning.studyMinutesToday,
+      },
+      financialSnapshot: {
+        currency: snapshot.finance.currency,
+        monthlyIncome: snapshot.finance.monthly.income,
+        monthlyExpense: snapshot.finance.monthly.expense,
+        netBalance: snapshot.finance.monthly.netBalance,
+        savingsRate: snapshot.finance.monthly.savingsRate,
+        burnRate: snapshot.finance.burnRate,
+        forecastEndOfMonthNet: snapshot.finance.forecast.endOfMonthNet,
+      },
+      taskStatus: {
+        pending: pendingTasks,
+        inProgress: inProgressTasks,
+        overdue: snapshot.tasks.overdue.length,
+        completedThisWeek: snapshot.tasks.metrics.completedThisWeek,
+        completionRate: snapshot.tasks.metrics.completionRate,
+        productivityScore: snapshot.scores.productivityScore,
+      },
+      aiInsight: snapshot.aiInsight,
+      dailySummary: snapshot.dailySummary,
+      scores: snapshot.scores,
       recentTasks,
+      intelligence: {
+        weeklyPerformance: snapshot.weeklyPerformance,
+        monthlyTrend: snapshot.monthlyTrend,
+      },
     };
   }
 }

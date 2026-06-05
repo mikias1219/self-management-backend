@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -8,6 +9,7 @@ import {
   IsUUID,
   Min,
 } from 'class-validator';
+import { LifeArea } from '../../../../common/domain/enums/life-area.enum';
 import { TaskPriority, TaskStatus } from '../../domain/enums/task.enums';
 
 export class CreateTaskDto {
@@ -34,6 +36,16 @@ export class CreateTaskDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @ApiPropertyOptional({ enum: LifeArea })
+  @IsOptional()
+  @IsEnum(LifeArea)
+  lifeArea?: LifeArea;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -66,4 +78,14 @@ export class CreateTaskDto {
   @IsOptional()
   @IsUUID()
   goalId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  habitId?: string;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  syncToCalendar?: boolean;
 }

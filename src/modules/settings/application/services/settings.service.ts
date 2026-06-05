@@ -49,4 +49,8 @@ export class SettingsService {
     });
     return saved;
   }
+
+  async saveSettings(settings: UserSettings): Promise<UserSettings> {
+    return this.repository.save(settings);
+  }
 }

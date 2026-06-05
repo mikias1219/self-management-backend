@@ -27,6 +27,16 @@ export class Habit extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   color?: string;
 
+  /** HH:mm local reminder for calendar sync */
+  @Column({ type: 'varchar', length: 5, nullable: true })
+  reminderTime?: string;
+
+  @Column({ default: true })
+  syncToCalendar: boolean;
+
+  @Column({ nullable: true })
+  googleCalendarEventId?: string;
+
   @OneToMany(() => HabitLog, (log) => log.habit)
   logs?: HabitLog[];
 }

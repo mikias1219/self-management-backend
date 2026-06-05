@@ -8,36 +8,64 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AiCoachSession } from '../../domain/entities/ai-coach-session.entity';
 import { AiChatContextService } from './ai-chat-context.service';
+import {
+  AiActionsService,
+  ProposedAction,
+} from './ai-actions.service';
 
 type CoachMessage = { role: string; content: string; createdAt: string };
 
-const SYSTEM_PROMPT = `You are LifeOS Assistant — a personal coach with read-only access to the user's LifeOS app data.
+interface OpenAiToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
 
-You receive a JSON snapshot keyed by module (tasks, goals, habits, finance, learning, english, spiritual, health, journal, notifications, activityLogs, analytics, achievements). Each module mirrors a real API route (e.g. tasks.api = "/tasks"). Use achievements.today / achievements.thisWeek for ongoing vs finished vs achieved counts.
+const SYSTEM_PROMPT = `You are LifeOS — a Personal Operating System analyst with read-only access to unified life data.
+
+You receive AI_CONTEXT: profile, intelligence (dailySummary, scores, finance analytics, task metrics), tasks, finance, goals, habits, learning, and other modules. intelligence.aiInsight is the system's own read — align with it when relevant.
+
+CORE QUESTIONS you must answer when asked:
+- What did I do? → activityLogs, completed tasks, habits, transactions today
+- What is my financial status? → intelligence.monthlyTrend, finance.monthly, burnRate, forecast, spendingByCategory
+- What should I do next? → schedule.todayAndUpcoming, schedule.summary, tasks.focusToday, tasks.overdue, intelligence.aiInsight
+- What is on my schedule / calendar? → schedule.todayAndUpcoming (tasks, goals, habits, reviews, Google events merged)
+
+SCHEDULE INTELLIGENCE (unified productivity):
+- schedule.summary: open tasks, due today, habits logged vs due, review done
+- schedule.todayAndUpcoming: merged timeline — cite kind (task/goal/habit/review/calendar), title, start time, status
+- tasks.syncedToCalendar: whether LifeOS pushed the item to Google Calendar
+
+FINANCE INTELLIGENCE (use real numbers only):
+- Monthly income/expense/net, savings rate %, burn rate, end-of-month forecast
+- Top overspend category from spendingByCategory
+
+TASK INTELLIGENCE:
+- focusToday, overdue, productivityScore, completionRate, weeklyCompletionTrend
+
+ACTIONS (you can now DO things, not just read):
+- Use a tool when the user asks to add, create, plan, log, record, complete, or finish something.
+  Tools: create_task, complete_task, log_habit, create_goal, add_journal_entry, add_transaction.
+- Call the tool with your best-extracted arguments. Do NOT also write a long answer — a short confirming sentence is enough.
+- The user reviews and confirms every action before it is saved, so propose confidently.
+- For pure questions ("what / how much / summarize"), answer from the snapshot WITHOUT calling a tool.
 
 DATA RULES:
-- Answer ONLY from the snapshot. Never invent items, amounts, or dates.
-- If a section is empty, state clearly: "No [module] data for today" and suggest logging it in LifeOS.
-- Use meta.today for "today" and meta.primaryCurrency for money.
-- You cannot create, edit, or delete records — only explain existing data.
+- Answer ONLY from the snapshot. Never invent amounts or dates.
+- Use profile.primaryCurrency (default ETB) for money.
 
-RESPONSE FORMAT (always follow for readability):
-1. Start with a bold one-line summary: **Summary:** …
-2. Use markdown ## headings per topic (e.g. ## Tasks, ## Finance Today).
-3. Use bullet lists (- item) for multiple entries; put the most important fact first in each bullet.
-4. Bold key numbers: **$120.50**, **3 tasks**, **45 min**
-5. For totals, show a small table or labeled lines:
-   - Expenses: **$X**
-   - Income: **$Y**
-   - Net: **$Z**
-6. End with **Tip:** or **Next step:** when helpful (one short line).
-7. Keep tone warm and professional. Prefer short paragraphs over walls of text.`;
+FORMAT:
+1. **Summary:** one bold line
+2. ## headings per domain
+3. Bullets with bold key numbers
+4. **Next step:** one actionable line when helpful`;
 
 @Injectable()
 export class AiChatService {
   constructor(
     private readonly config: ConfigService,
     private readonly contextService: AiChatContextService,
+    private readonly actions: AiActionsService,
     @InjectRepository(AiCoachSession)
     private readonly sessionsRepo: Repository<AiCoachSession>,
   ) {}
@@ -85,7 +113,18 @@ export class AiChatService {
     ];
 
     const model = this.config.get<string>('openAiModel') ?? 'gpt-4o-mini';
-    const reply = await this.callOpenAi(apiKey, model, openAiMessages);
+    const completion = await this.callOpenAi(apiKey, model, openAiMessages);
+
+    const pendingActions = this.toProposedActions(completion.toolCalls);
+    const reply =
+      completion.content?.trim() ||
+      (pendingActions.length
+        ? this.proposalSummary(pendingActions)
+        : '');
+
+    if (!reply) {
+      throw new ServiceUnavailableException('AI returned an empty response');
+    }
 
     const now = new Date().toISOString();
     const userMsg: CoachMessage = { role: 'user', content: trimmed, createdAt: now };
@@ -113,14 +152,79 @@ export class AiChatService {
       sessionId: saved.id,
       reply,
       messages: saved.messages,
+      pendingActions,
     };
+  }
+
+  /** Execute a previously proposed action after the user confirms it. */
+  async confirmAction(
+    userId: string,
+    sessionId: string,
+    action: ProposedAction,
+  ) {
+    const session = await this.sessionsRepo.findOne({
+      where: { id: sessionId, createdBy: userId },
+    });
+    if (!session) {
+      throw new BadRequestException('Chat session not found');
+    }
+
+    const result = await this.actions.execute(
+      userId,
+      action.tool,
+      action.args ?? {},
+    );
+
+    const note: CoachMessage = {
+      role: 'assistant',
+      content: result.ok ? `Done — ${result.message}` : `Couldn't do that — ${result.message}`,
+      createdAt: new Date().toISOString(),
+    };
+    session.messages = [...(session.messages ?? []), note];
+    const saved = await this.sessionsRepo.save(session);
+
+    return {
+      sessionId: saved.id,
+      ok: result.ok,
+      message: result.message,
+      messages: saved.messages,
+    };
+  }
+
+  private toProposedActions(toolCalls: OpenAiToolCall[]): ProposedAction[] {
+    const actions: ProposedAction[] = [];
+    for (const call of toolCalls) {
+      let args: Record<string, unknown> = {};
+      try {
+        args = call.function.arguments
+          ? (JSON.parse(call.function.arguments) as Record<string, unknown>)
+          : {};
+      } catch {
+        args = {};
+      }
+      actions.push({
+        id: call.id,
+        tool: call.function.name,
+        label: this.actions.describe(call.function.name, args),
+        args,
+      });
+    }
+    return actions;
+  }
+
+  private proposalSummary(actions: ProposedAction[]): string {
+    if (actions.length === 1) {
+      return `I can do this for you: ${actions[0].label}. Confirm to proceed.`;
+    }
+    const lines = actions.map((a) => `- ${a.label}`).join('\n');
+    return `I can do the following — confirm to proceed:\n${lines}`;
   }
 
   private async callOpenAi(
     apiKey: string,
     model: string,
     messages: Array<{ role: string; content: string }>,
-  ): Promise<string> {
+  ): Promise<{ content: string | null; toolCalls: OpenAiToolCall[] }> {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -132,6 +236,8 @@ export class AiChatService {
         messages,
         temperature: 0.4,
         max_tokens: 1536,
+        tools: this.actions.getToolDefinitions(),
+        tool_choice: 'auto',
       }),
     });
 
@@ -143,12 +249,14 @@ export class AiChatService {
     }
 
     const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{
+        message?: { content?: string | null; tool_calls?: OpenAiToolCall[] };
+      }>;
     };
-    const content = data.choices?.[0]?.message?.content?.trim();
-    if (!content) {
-      throw new ServiceUnavailableException('AI returned an empty response');
-    }
-    return content;
+    const message = data.choices?.[0]?.message;
+    return {
+      content: message?.content ?? null,
+      toolCalls: message?.tool_calls ?? [],
+    };
   }
 }

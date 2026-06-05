@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
+import { LifeArea } from '../../../../common/domain/enums/life-area.enum';
 import { GoalLevel } from '../../domain/enums/goal.enums';
 
 export class CreateGoalDto {
@@ -36,4 +46,20 @@ export class CreateGoalDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @ApiPropertyOptional({ enum: LifeArea })
+  @IsOptional()
+  @IsEnum(LifeArea)
+  lifeArea?: LifeArea;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  measurableTarget?: number;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  syncToCalendar?: boolean;
 }

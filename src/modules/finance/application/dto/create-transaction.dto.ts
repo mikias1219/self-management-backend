@@ -1,5 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
+import { IncomeSource } from '../../../../common/domain/enums/income-source.enum';
+import { PaymentMethod } from '../../../../common/domain/enums/payment-method.enum';
+import { RecurringInterval } from '../../../../common/domain/enums/recurring-interval.enum';
 import { TransactionType } from '../../domain/enums/finance.enums';
 
 export class CreateTransactionDto {
@@ -15,6 +27,12 @@ export class CreateTransactionDto {
   @IsNumber()
   amount: number;
 
+  @ApiPropertyOptional({ default: 'ETB' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  currency?: string;
+
   @ApiProperty()
   @IsDateString()
   transactionDate: string;
@@ -28,4 +46,29 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsUUID()
   categoryId?: string;
+
+  @ApiPropertyOptional({ enum: IncomeSource })
+  @IsOptional()
+  @IsEnum(IncomeSource)
+  incomeSource?: IncomeSource;
+
+  @ApiPropertyOptional({ enum: PaymentMethod })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
+
+  @ApiPropertyOptional({ enum: RecurringInterval })
+  @IsOptional()
+  @IsEnum(RecurringInterval)
+  recurringInterval?: RecurringInterval;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  linkedTaskId?: string;
 }

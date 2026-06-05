@@ -19,7 +19,14 @@ import { StudySession } from '../learning/domain/entities/study-session.entity';
 import { JournalEntry } from '../journal/domain/entities/journal-entry.entity';
 import { Notification } from '../notifications/domain/entities/notification.entity';
 import { SpiritualActivity } from '../spiritual/domain/entities/spiritual-activity.entity';
+import { ProductivityModule } from '../productivity/productivity.module';
+import { TasksModule } from '../tasks/tasks.module';
+import { HabitsModule } from '../habits/habits.module';
+import { GoalsModule } from '../goals/goals.module';
+import { JournalModule } from '../journal/journal.module';
+import { FinanceModule } from '../finance/finance.module';
 import { Task } from '../tasks/domain/entities/task.entity';
+import { AiActionsService } from './application/services/ai-actions.service';
 import { AiChatContextService } from './application/services/ai-chat-context.service';
 import { AiChatService } from './application/services/ai-chat.service';
 import { AiCoachService } from './application/services/ai-coach.service';
@@ -30,6 +37,12 @@ import { AiCoachController } from './presentation/controllers/ai-coach.controlle
   imports: [
     AchievementsModule,
     AnalyticsModule,
+    ProductivityModule,
+    TasksModule,
+    HabitsModule,
+    GoalsModule,
+    JournalModule,
+    FinanceModule,
     TypeOrmModule.forFeature([
       AiCoachSession,
       Task,
@@ -53,7 +66,12 @@ import { AiCoachController } from './presentation/controllers/ai-coach.controlle
     ]),
   ],
   controllers: [AiCoachController],
-  providers: [AiCoachService, AiChatContextService, AiChatService],
+  providers: [
+    AiCoachService,
+    AiChatContextService,
+    AiChatService,
+    AiActionsService,
+  ],
   exports: [AiCoachService, AiChatService],
 })
 export class AiCoachModule {}

@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { startOfDay, subDays } from 'date-fns';
-import { Repository } from 'typeorm';
+import { DeepPartial, Repository } from 'typeorm';
+import { GoogleCalendarService } from '../../../integrations/application/services/google-calendar.service';
 import {
   ActivityAction,
   ActivityModule,
@@ -22,12 +23,48 @@ export class HabitsService extends BaseCrudService<Habit> {
     @InjectRepository(HabitLog)
     private readonly habitLogRepo: Repository<HabitLog>,
     activityLogs: ActivityLogsService,
+    private readonly googleCalendar: GoogleCalendarService,
   ) {
     super(repository, activityLogs, {
       userId: '',
       module: ActivityModule.HABITS,
       entityType: 'Habit',
     });
+  }
+
+  override async create(
+    dto: DeepPartial<Habit>,
+    userId: string,
+  ): Promise<Habit> {
+    let saved = await super.create(
+      { syncToCalendar: true, reminderTime: '08:00', ...dto },
+      userId,
+    );
+    saved = await this.googleCalendar.syncHabit(userId, saved);
+    if (saved.googleCalendarEventId) {
+      saved = await this.repository.save(saved);
+    }
+    return saved;
+  }
+
+  override async update(
+    id: string,
+    dto: DeepPartial<Habit>,
+    userId: string,
+  ): Promise<Habit> {
+    const existing = await this.findOneForUser(userId, id);
+    let saved = await super.update(id, dto, userId);
+    saved = await this.googleCalendar.syncHabit(userId, saved);
+    if (saved.googleCalendarEventId !== existing.googleCalendarEventId) {
+      saved = await this.repository.save(saved);
+    }
+    return saved;
+  }
+
+  override async remove(id: string, userId: string): Promise<void> {
+    const existing = await this.findOneForUser(userId, id);
+    await this.googleCalendar.removeHabitEvent(userId, existing);
+    await super.remove(id, userId);
   }
 
   async createLog(

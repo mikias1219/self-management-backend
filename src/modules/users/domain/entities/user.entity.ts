@@ -18,4 +18,13 @@ export class User extends BaseEntity {
 
   @Column({ default: 'UTC' })
   timezone: string;
+
+  @Column({ default: 'ETB' })
+  primaryCurrency: string;
+
+  @Column({ type: 'text', nullable: true })
+  about?: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  focusAreas?: string[] | null;
 }

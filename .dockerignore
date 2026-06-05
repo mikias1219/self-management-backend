@@ -1,0 +1,31 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Build output
+dist
+build
+
+# Testing
+coverage
+.nyc_output
+test
+*.spec.ts
+*.e2e-spec.ts
+
+# Misc
+.git
+.gitignore
+README.md
+.env*
+!.env.example
+*.md
+.vscode
+.idea
+*.log
+.DS_Store
+*.http
+
+# Docker
+Dockerfile
+.dockerignore

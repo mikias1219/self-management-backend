@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { format } from 'date-fns';
+import { addDays, format } from 'date-fns';
 import { Between, In, Repository } from 'typeorm';
 import { AnalyticsPeriod } from '../../../../common/domain/enums/period.enum';
 import { resolveDateRange } from '../../../../common/utils/date-range.util';
 import { ActivityLog } from '../../../activity-logs/domain/entities/activity-log.entity';
 import { AchievementsService } from '../../../achievements/application/services/achievements.service';
 import { AnalyticsService } from '../../../analytics/application/services/analytics.service';
+import { LifeIntelligenceService } from '../../../analytics/application/services/life-intelligence.service';
 import { DailyReview } from '../../../daily-reviews/domain/entities/daily-review.entity';
 import { EnglishPractice } from '../../../english/domain/entities/english-practice.entity';
 import { FinanceAccount } from '../../../finance/domain/entities/account.entity';
@@ -24,6 +25,7 @@ import { StudySession } from '../../../learning/domain/entities/study-session.en
 import { JournalEntry } from '../../../journal/domain/entities/journal-entry.entity';
 import { Notification } from '../../../notifications/domain/entities/notification.entity';
 import { SpiritualActivity } from '../../../spiritual/domain/entities/spiritual-activity.entity';
+import { ProductivityScheduleService } from '../../../productivity/application/services/productivity-schedule.service';
 import { Task } from '../../../tasks/domain/entities/task.entity';
 import { TaskStatus } from '../../../tasks/domain/enums/task.enums';
 
@@ -37,6 +39,10 @@ function slimTask(t: Task) {
     status: t.taskStatus,
     priority: t.priority,
     dueDate: t.dueDate ?? null,
+    scheduledAt: t.scheduledAt ?? null,
+    estimatedMinutes: t.estimatedMinutes ?? null,
+    timeSpentMinutes: t.timeSpentMinutes ?? null,
+    syncedToCalendar: !!t.googleCalendarEventId,
     category: t.category ?? null,
     description: t.description?.slice(0, 120) ?? null,
   };
@@ -53,6 +59,7 @@ function slimTx(tx: FinanceTransaction) {
 
 /** Maps each LifeOS API area to snapshot data the assistant can cite. */
 export const LIFEOS_MODULES = [
+  'schedule',
   'tasks',
   'goals',
   'habits',
@@ -74,6 +81,7 @@ export class AiChatContextService {
   constructor(
     private readonly achievementsService: AchievementsService,
     private readonly analyticsService: AnalyticsService,
+    private readonly lifeIntelligence: LifeIntelligenceService,
     @InjectRepository(Task) private readonly tasksRepo: Repository<Task>,
     @InjectRepository(FinanceTransaction)
     private readonly txRepo: Repository<FinanceTransaction>,
@@ -101,9 +109,11 @@ export class AiChatContextService {
     private readonly notificationsRepo: Repository<Notification>,
     @InjectRepository(ActivityLog)
     private readonly activityLogsRepo: Repository<ActivityLog>,
+    private readonly productivitySchedule: ProductivityScheduleService,
   ) {}
 
   async buildForUser(userId: string) {
+    const aiContext = await this.lifeIntelligence.buildAiContext(userId);
     const dayRange = resolveDateRange(AnalyticsPeriod.DAY);
     const weekRange = resolveDateRange(AnalyticsPeriod.WEEK);
     const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -137,6 +147,7 @@ export class AiChatContextService {
       unreadCount,
       recentNotifications,
       recentActivity,
+      unifiedSchedule,
     ] = await Promise.all([
       this.analyticsService.getCountsByPeriod(userId, {
         period: AnalyticsPeriod.DAY,
@@ -255,6 +266,7 @@ export class AiChatContextService {
         order: { createdAt: 'DESC' },
         take: 25,
       }),
+      this.productivitySchedule.getSchedule(userId, 7, 'upcoming'),
     ]);
 
     let todayExpense = 0;
@@ -275,7 +287,7 @@ export class AiChatContextService {
 
     const habitNames = new Map(habits.map((h) => [h.id, h.name]));
     const loggedHabitIds = new Set(habitLogsToday.map((l) => l.habitId));
-    const primaryCurrency = accounts[0]?.currency ?? 'USD';
+    const primaryCurrency = accounts[0]?.currency ?? 'ETB';
 
     const [achievementsToday, achievementsWeek] = await Promise.all([
       this.achievementsService.getSnapshot(userId, {
@@ -294,15 +306,37 @@ export class AiChatContextService {
           start: format(weekRange.start, 'yyyy-MM-dd'),
           end: format(weekRange.end, 'yyyy-MM-dd'),
         },
-        primaryCurrency,
+        primaryCurrency: aiContext.profile.primaryCurrency,
         modulesInSnapshot: [...LIFEOS_MODULES],
       },
+      profile: aiContext.profile,
+      intelligence: aiContext.intelligence,
       analytics: {
         today: analyticsToday.counts,
         thisWeek: analyticsWeek.counts,
       },
+      schedule: {
+        api: '/productivity/schedule',
+        summary: unifiedSchedule.summary,
+        todaySuccess: unifiedSchedule.todaySuccess,
+        googleCalendar: unifiedSchedule.googleCalendar,
+        todayAndUpcoming: unifiedSchedule.items
+          .filter((i) => new Date(i.start) <= addDays(new Date(), 2))
+          .slice(0, 40)
+          .map((i) => ({
+            kind: i.kind,
+            title: i.title,
+            start: i.start,
+            end: i.end ?? null,
+            status: i.status ?? null,
+            progress: i.progress ?? null,
+            measurable: i.measurable ?? null,
+          })),
+        totalItems: unifiedSchedule.items.length,
+      },
       tasks: {
         api: '/tasks',
+        ...aiContext.tasks,
         dueToday: dueToday.map(slimTask),
         open: openTasks.map(slimTask),
         completedToday: completedToday.map(slimTask),
@@ -320,7 +354,9 @@ export class AiChatContextService {
           progressPercent: Math.round((g.progress ?? 0) * 100) / 100,
           targetDate: g.targetDate ?? null,
           category: g.category ?? null,
+          lifeArea: g.lifeArea ?? null,
         })),
+        tracked: aiContext.goals,
         count: goals.length,
       },
       habits: {
@@ -353,18 +389,13 @@ export class AiChatContextService {
       },
       finance: {
         api: '/finance',
+        ...aiContext.finance,
         todayExpenseTotal: todayExpense,
         todayIncomeTotal: todayIncome,
         todayNet: todayIncome - todayExpense,
-        currency: primaryCurrency,
+        currency: aiContext.profile.primaryCurrency,
         expenses,
         income,
-        accounts: accounts.map((a) => ({
-          name: a.name,
-          type: a.accountType,
-          balance: toNum(a.balance),
-          currency: a.currency ?? primaryCurrency,
-        })),
         budgets: budgets.map((b) => ({
           name: b.name,
           limit: toNum(b.amount),

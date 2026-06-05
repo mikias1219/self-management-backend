@@ -14,6 +14,6 @@ export class FinanceAccount extends BaseEntity {
   @Column({ type: 'decimal', precision: 14, scale: 2, default: 0 })
   balance: number;
 
-  @Column({ default: 'USD' })
+  @Column({ default: 'ETB' })
   currency: string;
 }

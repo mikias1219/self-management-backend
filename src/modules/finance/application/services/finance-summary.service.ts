@@ -91,6 +91,22 @@ export class FinanceSummaryService {
     const savingsRate =
       totalIncome > 0 ? Math.round((netCashFlow / totalIncome) * 1000) / 10 : 0;
 
+    const daysElapsed = Math.max(
+      1,
+      Math.ceil(
+        (range.end.getTime() - range.start.getTime()) / (1000 * 60 * 60 * 24),
+      ),
+    );
+    const burnRate =
+      totalExpense > 0
+        ? Math.round((totalExpense / daysElapsed) * 100) / 100
+        : 0;
+    const daysInPeriod = daysElapsed;
+    const forecastEndOfMonthExpense =
+      Math.round(burnRate * daysInPeriod * 100) / 100;
+    const forecastEndOfMonthNet =
+      Math.round((totalIncome - forecastEndOfMonthExpense) * 100) / 100;
+
     const totalSavingsTarget = savingsGoals.reduce(
       (s, g) => s + toNum(g.targetAmount),
       0,
@@ -120,6 +136,9 @@ export class FinanceSummaryService {
         totalSavingsCurrent,
         accountCount: accounts.length,
         transactionCount: transactions.length,
+        burnRate,
+        forecastEndOfMonthExpense,
+        forecastEndOfMonthNet,
       },
       budgets: budgets.map((b) => {
         const amount = toNum(b.amount);
