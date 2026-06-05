@@ -58,6 +58,16 @@ export class FinanceCyclesService {
     });
   }
 
+  async getOneForUser(userId: string, id: string): Promise<FinanceCycle> {
+    const cycle = await this.cyclesRepo.findOne({
+      where: { id, createdBy: userId },
+    });
+    if (!cycle) {
+      throw new BadRequestException('Finance cycle not found');
+    }
+    return cycle;
+  }
+
   async getCurrent(userId: string): Promise<FinanceCycle | null> {
     const cycle = await this.cyclesRepo.findOne({
       where: { createdBy: userId, cycleStatus: FinanceCycleStatus.OPEN },
@@ -217,7 +227,7 @@ export class FinanceCyclesService {
 
     for (const tx of txs) {
       const amt = toNum(tx.netAmount ?? tx.amount);
-      if (tx.transactionType === TransactionType.TRANSFER && tx.savingsGoalId) {
+      if (tx.transactionType === TransactionType.TRANSFER) {
         totalSavings += amt;
       } else if (tx.transactionType === TransactionType.EXPENSE) {
         const cls = tx.expenseCategory?.classificationType;
@@ -321,21 +331,22 @@ export class FinanceCyclesService {
     );
 
     // Savings shortfall per goal
-    const goals = await this.savingsRepo.find({
-      where: { createdBy: userId },
-      relations: { transactions: true },
-    });
+    const goals = await this.savingsRepo.find({ where: { createdBy: userId } });
     let totalShortfall = 0;
     for (const g of goals) {
       const target = toNum(g.monthlyTargetAmount);
       if (target <= 0) continue;
-      const saved = (g.transactions ?? [])
-        .filter(
-          (tx) =>
-            tx.transactionDate >= cycle.startDate &&
-            tx.transactionDate <= cycle.endDate,
-        )
-        .reduce((sum, tx) => sum + toNum(tx.amount), 0);
+      const savingsInCycle = await this.txRepo.find({
+        where: {
+          createdBy: userId,
+          savingsGoalId: g.id,
+          transactionDate: Between(cycle.startDate, cycle.endDate),
+        },
+      });
+      const saved = savingsInCycle.reduce(
+        (sum, tx) => sum + toNum(tx.amount),
+        0,
+      );
       const shortfall = Math.max(0, target - saved);
       if (shortfall > 0) {
         g.savingsShortfallCarryForward =
@@ -380,7 +391,7 @@ export class FinanceCyclesService {
       if (
         salaryTx.transactionDate >= existingOpen.startDate &&
         salaryTx.transactionDate <= existingOpen.endDate &&
-        salaryInCycle > 0
+        salaryInCycle > 1
       ) {
         hadSalaryAlready = true;
       }

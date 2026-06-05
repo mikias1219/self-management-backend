@@ -14,7 +14,6 @@ import {
   TransactionType,
 } from '../../domain/enums/finance.enums';
 import { FinanceCycle } from '../../domain/entities/finance-cycle.entity';
-import { BudgetsService } from './budgets.service';
 import { FinanceCyclesService } from './finance-cycles.service';
 
 function toNum(v: unknown): number {
@@ -36,13 +35,10 @@ export class FinanceSummaryService {
     private readonly incomeCatRepo: Repository<IncomeCategory>,
     @InjectRepository(FinanceCycle)
     private readonly cyclesRepo: Repository<FinanceCycle>,
-    private readonly budgetsService: BudgetsService,
     private readonly financeCycles: FinanceCyclesService,
   ) {}
 
   async getSummary(userId: string, query: DateRangeQueryDto) {
-    await this.budgetsService.syncSpentForUser(userId);
-
     const range = resolveDateRange(query.period, query.startDate, query.endDate);
     const between = Between(
       format(range.start, 'yyyy-MM-dd'),

@@ -225,7 +225,7 @@ export class TransactionsService extends BaseCrudService<FinanceTransaction> {
       await this.financeCycles.refreshCycleTotals(userId, cycleToRefresh);
     }
 
-    await this.budgetsService.syncSpentForUser(userId);
+    await this.budgetsService.syncSpentForTransactionChange(userId, saved);
     return saved;
   }
 
@@ -269,7 +269,21 @@ export class TransactionsService extends BaseCrudService<FinanceTransaction> {
     if (saved.savingsGoalId) {
       await this.applySavingsGoalDelta(userId, saved.savingsGoalId, toNum(saved.amount));
     }
-    await this.budgetsService.syncSpentForUser(userId);
+    if (
+      saved.pendingObligationId &&
+      saved.pendingObligationId !== existing.pendingObligationId
+    ) {
+      await this.financeCycles.markObligationPaid(
+        userId,
+        saved.pendingObligationId,
+        saved.id,
+      );
+    }
+    await this.budgetsService.syncSpentForTransactionChange(
+      userId,
+      saved,
+      existing,
+    );
     return saved;
   }
 
@@ -291,6 +305,10 @@ export class TransactionsService extends BaseCrudService<FinanceTransaction> {
       await this.applySavingsGoalDelta(userId, existing.savingsGoalId, -toNum(existing.amount));
     }
     await super.remove(id, userId);
-    await this.budgetsService.syncSpentForUser(userId);
+    await this.budgetsService.syncSpentForTransactionChange(
+      userId,
+      null,
+      existing,
+    );
   }
 }
