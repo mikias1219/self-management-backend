@@ -9,13 +9,13 @@ RUN apk add --no-cache libc6-compat python3 make g++  # for native modules like 
 # ---- Dependencies ----
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 # ---- Builder ----
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN npm install -g @nestjs/cli && nest build
 
 # ---- Runner ----
 FROM base AS runner
@@ -26,7 +26,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
 
-# Expose NestJS default port (configured to 4000 in main.ts)
-EXPOSE 4000
+# Expose NestJS default port (configured to 8080 in container apps)
+EXPOSE 8080
 
 CMD ["node", "dist/main.js"]
