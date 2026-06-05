@@ -12,11 +12,6 @@ export class CreateSavingsGoalDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
-  currentAmount?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
   @IsDateString()
   targetDate?: string;
 }

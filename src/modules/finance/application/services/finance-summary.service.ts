@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
-import { format } from 'date-fns';
+import { differenceInCalendarDays, format } from 'date-fns';
 import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
 import { resolveDateRange } from '../../../../common/utils/date-range.util';
 import { FinanceAccount } from '../../domain/entities/account.entity';
@@ -10,7 +10,10 @@ import { ExpenseCategory } from '../../domain/entities/expense-category.entity';
 import { IncomeCategory } from '../../domain/entities/income-category.entity';
 import { SavingsGoal } from '../../domain/entities/savings-goal.entity';
 import { FinanceTransaction } from '../../domain/entities/transaction.entity';
-import { TransactionType } from '../../domain/enums/finance.enums';
+import {
+  ExpenseClassificationType,
+  TransactionType,
+} from '../../domain/enums/finance.enums';
 import { BudgetsService } from './budgets.service';
 
 function toNum(v: unknown): number {
@@ -60,10 +63,25 @@ export class FinanceSummaryService {
     let totalIncome = 0;
     let totalExpense = 0;
     let totalTransfer = 0;
+    let totalVariableExpense = 0;
 
     const expenseByCategory = new Map<string, number>();
     const incomeByCategory = new Map<string, number>();
     const dailyFlow = new Map<string, { income: number; expense: number }>();
+
+    const classificationByCategoryId = new Map(
+      expenseCats.map((c) => [c.id, c.classificationType]),
+    );
+    const isVariableExpenseTx = (tx: FinanceTransaction): boolean => {
+      if (tx.transactionType !== TransactionType.EXPENSE) return false;
+      if (!tx.categoryId) return true; // uncategorized -> treated as variable
+      const cls = classificationByCategoryId.get(tx.categoryId);
+      return (
+        cls === ExpenseClassificationType.VARIABLE_NECESSITY ||
+        cls === ExpenseClassificationType.DISCRETIONARY ||
+        cls === undefined
+      );
+    };
 
     for (const tx of transactions) {
       const amount = toNum(tx.amount);
@@ -77,6 +95,7 @@ export class FinanceSummaryService {
         incomeByCategory.set(key, (incomeByCategory.get(key) ?? 0) + amount);
       } else if (tx.transactionType === TransactionType.EXPENSE) {
         totalExpense += amount;
+        if (isVariableExpenseTx(tx)) totalVariableExpense += amount;
         dayEntry.expense += amount;
         const key = tx.categoryId ?? 'uncategorized';
         expenseByCategory.set(key, (expenseByCategory.get(key) ?? 0) + amount);
@@ -91,19 +110,27 @@ export class FinanceSummaryService {
     const savingsRate =
       totalIncome > 0 ? Math.round((netCashFlow / totalIncome) * 1000) / 10 : 0;
 
+    const today = new Date();
+    const elapsedEnd = today < range.end ? today : range.end;
     const daysElapsed = Math.max(
       1,
-      Math.ceil(
-        (range.end.getTime() - range.start.getTime()) / (1000 * 60 * 60 * 24),
-      ),
+      differenceInCalendarDays(elapsedEnd, range.start) + 1,
     );
+    const daysInPeriod = Math.max(
+      1,
+      differenceInCalendarDays(range.end, range.start) + 1,
+    );
+    const remainingDaysInCycle = Math.max(0, daysInPeriod - daysElapsed);
+
+    // Burn rate + forecast should operate only on variable spending (not fixed obligations, not savings transfers).
     const burnRate =
-      totalExpense > 0
-        ? Math.round((totalExpense / daysElapsed) * 100) / 100
+      totalVariableExpense > 0
+        ? Math.round((totalVariableExpense / daysElapsed) * 100) / 100
         : 0;
-    const daysInPeriod = daysElapsed;
     const forecastEndOfMonthExpense =
-      Math.round(burnRate * daysInPeriod * 100) / 100;
+      Math.round(
+        (totalVariableExpense + burnRate * remainingDaysInCycle) * 100,
+      ) / 100;
     const forecastEndOfMonthNet =
       Math.round((totalIncome - forecastEndOfMonthExpense) * 100) / 100;
 

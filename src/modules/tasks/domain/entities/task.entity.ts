@@ -1,4 +1,6 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import { Goal } from '../../../goals/domain/entities/goal.entity';
+import { Habit } from '../../../habits/domain/entities/habit.entity';
 import { LifeArea } from '../../../../common/domain/enums/life-area.enum';
 import { BaseEntity } from '../../../../common/domain/base.entity';
 import { TaskPriority, TaskStatus } from '../enums/task.enums';
@@ -48,8 +50,16 @@ export class Task extends BaseEntity {
   @Column({ type: 'uuid', nullable: true })
   goalId?: string;
 
+  @ManyToOne(() => Goal, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'goalId' })
+  goal?: Goal;
+
   @Column({ type: 'uuid', nullable: true })
   habitId?: string;
+
+  @ManyToOne(() => Habit, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'habitId' })
+  habit?: Habit;
 
   @Column({ default: true })
   syncToCalendar: boolean;

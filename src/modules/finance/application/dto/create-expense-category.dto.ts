@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { ExpenseClassificationType } from '../../domain/enums/finance.enums';
 
 export class CreateExpenseCategoryDto {
   @ApiProperty()
@@ -15,4 +16,9 @@ export class CreateExpenseCategoryDto {
   @IsOptional()
   @IsString()
   color?: string;
+
+  @ApiPropertyOptional({ enum: ExpenseClassificationType })
+  @IsOptional()
+  @IsEnum(ExpenseClassificationType)
+  classificationType?: ExpenseClassificationType;
 }

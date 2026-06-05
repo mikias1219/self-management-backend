@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
+import { habitLogsInRange } from '../../../../common/utils/habit-logs.util';
 import {
   eachDayOfInterval,
   endOfDay,
@@ -13,8 +14,8 @@ import { AnalyticsPeriod } from '../../../../common/domain/enums/period.enum';
 import { resolveDateRange } from '../../../../common/utils/date-range.util';
 import { Goal } from '../../../goals/domain/entities/goal.entity';
 import { GoalLevel } from '../../../goals/domain/enums/goal.enums';
-import { HabitLog } from '../../../habits/domain/entities/habit-log.entity';
 import { Habit } from '../../../habits/domain/entities/habit.entity';
+import type { HabitLog } from '../../../habits/domain/entities/habit-log.entity';
 import { Task } from '../../../tasks/domain/entities/task.entity';
 import { TaskStatus } from '../../../tasks/domain/enums/task.enums';
 import type {
@@ -28,7 +29,6 @@ export class ProductivityMetricsService {
     @InjectRepository(Task) private readonly tasksRepo: Repository<Task>,
     @InjectRepository(Goal) private readonly goalsRepo: Repository<Goal>,
     @InjectRepository(Habit) private readonly habitsRepo: Repository<Habit>,
-    @InjectRepository(HabitLog) private readonly habitLogsRepo: Repository<HabitLog>,
   ) {}
 
   async getAllPeriods(userId: string) {
@@ -54,21 +54,23 @@ export class ProductivityMetricsService {
     period: AnalyticsPeriod,
   ): Promise<PeriodProductivityMetrics> {
     const range = resolveDateRange(period);
-    const timeBetween = Between(range.start, range.end);
     const now = new Date();
     const effectiveEnd = min([range.end, endOfDay(now)]);
 
-    const [tasksInRange, goalsInRange, habits, habitLogs] = await Promise.all([
+    const [tasksInRange, goalsInRange, habits] = await Promise.all([
       this.tasksRepo.find({
         where: { createdBy: userId },
+        relations: { goal: true, habit: true },
         order: { updatedAt: 'DESC' },
       }),
       this.goalsRepo.find({ where: { createdBy: userId } }),
-      this.habitsRepo.find({ where: { createdBy: userId } }),
-      this.habitLogsRepo.find({
-        where: { createdBy: userId, completedAt: timeBetween },
+      this.habitsRepo.find({
+        where: { createdBy: userId },
+        relations: { logs: true },
       }),
     ]);
+
+    const habitLogs = habitLogsInRange(habits, range.start, range.end);
 
     const taskAnchor = (t: Task) => {
       const raw = t.scheduledAt ?? t.dueDate ?? t.startDate;

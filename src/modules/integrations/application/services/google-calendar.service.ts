@@ -18,6 +18,16 @@ import { HabitFrequency } from '../../../habits/domain/enums/habit.enums';
 import { Task } from '../../../tasks/domain/entities/task.entity';
 import { TaskStatus } from '../../../tasks/domain/enums/task.enums';
 
+type CalendarProbeResult =
+  | { ok: true }
+  | { ok: false; code?: string; message: string; helpUrl?: string };
+
+function isProbeFailure(
+  probe: CalendarProbeResult,
+): probe is { ok: false; code?: string; message: string; helpUrl?: string } {
+  return probe.ok === false;
+}
+
 /** Full calendar + events scopes so existing tokens can create/update/delete events. */
 const CALENDAR_SCOPES = [
   'https://www.googleapis.com/auth/calendar',
@@ -111,7 +121,7 @@ export class GoogleCalendarService {
       await this.settingsService.saveSettings(settings);
 
       const probe = await this.probeCalendarWrite(userId);
-      if (!probe.ok) {
+      if (isProbeFailure(probe)) {
         throw new BadRequestException(probe.message);
       }
 
@@ -162,7 +172,7 @@ export class GoogleCalendarService {
     if (connected) {
       const probe = await this.probeCalendarWrite(userId);
       syncReady = probe.ok;
-      if (!probe.ok) {
+      if (isProbeFailure(probe)) {
         if (probe.code === 'insufficient_scopes') {
           scopeError = 'insufficient_scopes';
         } else if (probe.code === 'api_disabled') {
@@ -248,10 +258,7 @@ export class GoogleCalendarService {
   /** Verify token can list/write calendar events (catches stale OAuth scopes). */
   private async probeCalendarWrite(
     userId: string,
-  ): Promise<
-    | { ok: true }
-    | { ok: false; code?: string; message: string; helpUrl?: string }
-  > {
+  ): Promise<CalendarProbeResult> {
     try {
       const calendar = await this.getCalendarClient(userId);
       await calendar.events.list({

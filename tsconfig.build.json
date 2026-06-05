@@ -5,5 +5,12 @@
     "noEmitOnError": false,
     "strictNullChecks": false,
     "noImplicitAny": false
-  }
+  },
+  "exclude": [
+    "**/*.spec.ts",
+    "**/*.e2e-spec.ts",
+    "test",
+    "dist",
+    "node_modules"
+  ]
 }

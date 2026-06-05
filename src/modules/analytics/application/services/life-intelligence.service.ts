@@ -9,6 +9,7 @@ import {
   startOfDay,
 } from 'date-fns';
 import { Between, In, Repository } from 'typeorm';
+import { habitLogsInRange } from '../../../../common/utils/habit-logs.util';
 import { AnalyticsPeriod } from '../../../../common/domain/enums/period.enum';
 import { LifeArea } from '../../../../common/domain/enums/life-area.enum';
 import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
@@ -20,7 +21,6 @@ import { FinanceTransaction } from '../../../finance/domain/entities/transaction
 import { TransactionType } from '../../../finance/domain/enums/finance.enums';
 import { Goal } from '../../../goals/domain/entities/goal.entity';
 import { Habit } from '../../../habits/domain/entities/habit.entity';
-import { HabitLog } from '../../../habits/domain/entities/habit-log.entity';
 import { StudySession } from '../../../learning/domain/entities/study-session.entity';
 import { Task } from '../../../tasks/domain/entities/task.entity';
 import { TaskStatus } from '../../../tasks/domain/enums/task.enums';
@@ -57,7 +57,6 @@ export class LifeIntelligenceService {
     @InjectRepository(Task) private readonly tasksRepo: Repository<Task>,
     @InjectRepository(Goal) private readonly goalsRepo: Repository<Goal>,
     @InjectRepository(Habit) private readonly habitsRepo: Repository<Habit>,
-    @InjectRepository(HabitLog) private readonly habitLogsRepo: Repository<HabitLog>,
     @InjectRepository(FinanceTransaction)
     private readonly txRepo: Repository<FinanceTransaction>,
     @InjectRepository(FinanceAccount)
@@ -91,10 +90,12 @@ export class LifeIntelligenceService {
     const [monthTx, weekTx, accounts, expenseCats, incomeCats] = await Promise.all([
       this.txRepo.find({
         where: { createdBy: userId, transactionDate: monthBetween },
+        relations: { account: true },
         order: { transactionDate: 'ASC' },
       }),
       this.txRepo.find({
         where: { createdBy: userId, transactionDate: weekBetween },
+        relations: { account: true },
       }),
       this.accountsRepo.find({ where: { createdBy: userId } }),
       this.expenseCatRepo.find({ where: { createdBy: userId } }),
@@ -314,7 +315,7 @@ export class LifeIntelligenceService {
     const weekRange = resolveDateRange(AnalyticsPeriod.WEEK);
     const monthRange = resolveDateRange(AnalyticsPeriod.MONTH);
 
-    const [finance, tasks, goals, habits, habitLogsToday, studyToday] =
+    const [finance, tasks, goals, habits, studyToday] =
       await Promise.all([
         this.getFinanceIntelligence(userId, query),
         this.getTaskIntelligence(userId),
@@ -323,12 +324,10 @@ export class LifeIntelligenceService {
           order: { updatedAt: 'DESC' },
           take: 15,
         }),
-        this.habitsRepo.find({ where: { createdBy: userId }, take: 30 }),
-        this.habitLogsRepo.find({
-          where: {
-            createdBy: userId,
-            completedAt: Between(dayRange.start, dayRange.end),
-          },
+        this.habitsRepo.find({
+          where: { createdBy: userId },
+          relations: { logs: true },
+          take: 30,
         }),
         this.studyRepo.find({
           where: {
@@ -341,6 +340,11 @@ export class LifeIntelligenceService {
         }),
       ]);
 
+    const habitLogsToday = habitLogsInRange(
+      habits,
+      dayRange.start,
+      dayRange.end,
+    );
     const loggedHabitIds = new Set(habitLogsToday.map((l) => l.habitId));
     const habitCompletionToday =
       habits.length > 0

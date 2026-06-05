@@ -1,9 +1,11 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import { FinanceAccount } from './account.entity';
 import { IncomeSource } from '../../../../common/domain/enums/income-source.enum';
 import { PaymentMethod } from '../../../../common/domain/enums/payment-method.enum';
 import { RecurringInterval } from '../../../../common/domain/enums/recurring-interval.enum';
 import { BaseEntity } from '../../../../common/domain/base.entity';
 import { TransactionType } from '../enums/finance.enums';
+import { SavingsGoal } from './savings-goal.entity';
 
 @Entity('finance_transactions')
 @Index(['createdBy', 'transactionDate'])
@@ -12,6 +14,10 @@ import { TransactionType } from '../enums/finance.enums';
 export class FinanceTransaction extends BaseEntity {
   @Column({ type: 'uuid' })
   accountId: string;
+
+  @ManyToOne(() => FinanceAccount, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'accountId' })
+  account: FinanceAccount;
 
   @Column({ type: 'enum', enum: TransactionType })
   transactionType: TransactionType;
@@ -49,4 +55,11 @@ export class FinanceTransaction extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   linkedTaskId?: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  savingsGoalId?: string;
+
+  @ManyToOne(() => SavingsGoal, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'savingsGoalId' })
+  savingsGoal?: SavingsGoal;
 }

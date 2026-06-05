@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { addDays, endOfDay, format, startOfDay } from 'date-fns';
-import { Between, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
+import { habitLogsInRange } from '../../../../common/utils/habit-logs.util';
 import { DailyReview } from '../../../daily-reviews/domain/entities/daily-review.entity';
 import { Goal } from '../../../goals/domain/entities/goal.entity';
-import { HabitLog } from '../../../habits/domain/entities/habit-log.entity';
 import { Habit } from '../../../habits/domain/entities/habit.entity';
 import { GoogleCalendarService } from '../../../integrations/application/services/google-calendar.service';
 import { IcalCalendarService } from '../../../integrations/application/services/ical-calendar.service';
@@ -21,7 +21,6 @@ export class ProductivityScheduleService {
     @InjectRepository(Task) private readonly tasksRepo: Repository<Task>,
     @InjectRepository(Goal) private readonly goalsRepo: Repository<Goal>,
     @InjectRepository(Habit) private readonly habitsRepo: Repository<Habit>,
-    @InjectRepository(HabitLog) private readonly habitLogsRepo: Repository<HabitLog>,
     @InjectRepository(DailyReview) private readonly reviewsRepo: Repository<DailyReview>,
     private readonly icalCalendar: IcalCalendarService,
     private readonly googleCalendar: GoogleCalendarService,
@@ -39,14 +38,12 @@ export class ProductivityScheduleService {
     const rangeEnd =
       scope === 'today' ? todayEnd : endOfDay(addDays(now, days));
     const todayStr = format(now, 'yyyy-MM-dd');
-    const timeBetween = Between(todayStart, todayEnd);
     const fetchDays = scope === 'today' ? 1 : days;
 
     const [
       tasks,
       goals,
       habits,
-      habitLogsToday,
       reviewToday,
       calendar,
       gcStatus,
@@ -62,10 +59,8 @@ export class ProductivityScheduleService {
         }),
         this.habitsRepo.find({
           where: { createdBy: userId },
+          relations: { logs: true },
           order: { name: 'ASC' },
-        }),
-        this.habitLogsRepo.find({
-          where: { createdBy: userId, completedAt: timeBetween },
         }),
         this.reviewsRepo.find({
           where: { createdBy: userId, reviewDate: todayStr },
@@ -94,6 +89,7 @@ export class ProductivityScheduleService {
         .filter((id): id is string => !!id),
     );
 
+    const habitLogsToday = habitLogsInRange(habits, todayStart, todayEnd);
     const loggedHabitIds = new Set(habitLogsToday.map((l) => l.habitId));
     const items: ScheduleItem[] = [];
 

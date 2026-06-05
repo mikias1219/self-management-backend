@@ -11,3 +11,10 @@ export enum TransactionType {
   EXPENSE = 'expense',
   TRANSFER = 'transfer',
 }
+
+export enum ExpenseClassificationType {
+  FIXED_OBLIGATION = 'fixed_obligation',
+  VARIABLE_NECESSITY = 'variable_necessity',
+  DISCRETIONARY = 'discretionary',
+  SAVINGS_TRANSFER = 'savings_transfer',
+}

@@ -71,4 +71,12 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsUUID()
   linkedTaskId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Link a transfer transaction to a savings goal (savings transfer).',
+  })
+  @IsOptional()
+  @IsUUID()
+  savingsGoalId?: string;
 }
