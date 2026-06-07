@@ -32,4 +32,11 @@ export class UserSettings extends BaseEntity {
    */
   @Column({ type: 'int', default: 25 })
   salaryDay: number;
+
+  /** Annual savings target amount (e.g. ETB saved this calendar year). */
+  @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true })
+  annualSavingsTarget?: number;
+
+  @Column({ default: false })
+  financeOnboardingCompleted: boolean;
 }

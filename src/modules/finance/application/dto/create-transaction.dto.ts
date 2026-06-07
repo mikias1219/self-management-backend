@@ -132,4 +132,14 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsUUID()
   savingsGoalId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isWastage?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPartialPayment?: boolean;
 }

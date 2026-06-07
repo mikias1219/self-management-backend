@@ -76,6 +76,69 @@ export class FinanceCyclesService {
     return cycle;
   }
 
+  async getCycleDetail(userId: string, id: string) {
+    const cycle = await this.cyclesRepo.findOne({
+      where: { id, createdBy: userId },
+      relations: {
+        transactions: { expenseCategory: true },
+        pendingObligations: true,
+      },
+    });
+    if (!cycle) {
+      throw new BadRequestException('Finance cycle not found');
+    }
+
+    const transactions = [...(cycle.transactions ?? [])].sort((a, b) =>
+      a.transactionDate.localeCompare(b.transactionDate),
+    );
+    const obligations = [...(cycle.pendingObligations ?? [])].sort((a, b) =>
+      a.dueDate.localeCompare(b.dueDate),
+    );
+
+    return {
+      cycle: {
+        id: cycle.id,
+        startDate: cycle.startDate,
+        endDate: cycle.endDate,
+        status: cycle.cycleStatus,
+        grossSalary: toNum(cycle.grossSalary),
+        netSalary: toNum(cycle.netSalary),
+        fixedObligations: toNum(cycle.fixedObligations),
+        savingsTarget: toNum(cycle.savingsTarget),
+        spendingBudget: toNum(cycle.spendingBudget),
+        totalFixedObligations: toNum(cycle.totalFixedObligations),
+        totalSavingsAllocated: toNum(cycle.totalSavingsAllocated),
+        totalVariableSpent: toNum(cycle.totalVariableSpent),
+        remainingBalance: toNum(cycle.remainingBalance),
+        savingsShortfall: toNum(cycle.savingsShortfall),
+        unspentBudget: toNum(cycle.unspentBudget),
+        actualSavingsRate: cycle.actualSavingsRate,
+        financialHealthScore: cycle.financialHealthScore,
+        fixedObligationRate: cycle.fixedObligationRate,
+        discretionaryRate: cycle.discretionaryRate,
+        topExpenseCategory: cycle.largestExpenseCategory,
+        closedAt: cycle.closedAt,
+      },
+      transactions: transactions.map((tx) => ({
+        id: tx.id,
+        transactionType: tx.transactionType,
+        amount: toNum(tx.amount),
+        transactionDate: tx.transactionDate,
+        description: tx.description,
+        categoryName: tx.expenseCategory?.name,
+        isWastage: tx.isWastage,
+        isPartialPayment: tx.isPartialPayment,
+      })),
+      obligations: obligations.map((o) => ({
+        id: o.id,
+        name: o.name,
+        expectedAmount: toNum(o.expectedAmount),
+        dueDate: o.dueDate,
+        status: o.obligationStatus,
+      })),
+    };
+  }
+
   async findOpenCycle(userId: string): Promise<FinanceCycle | null> {
     return this.cyclesRepo.findOne({
       where: { createdBy: userId, cycleStatus: FinanceCycleStatus.OPEN },
@@ -363,12 +426,18 @@ export class FinanceCyclesService {
         0,
       );
       const shortfall = Math.max(0, target - saved);
+      const surplus = Math.max(0, saved - target);
       if (shortfall > 0) {
         g.savingsShortfallCarryForward =
           toNum(g.savingsShortfallCarryForward) + shortfall;
         totalShortfall += shortfall;
-        await this.savingsRepo.save(g);
+      } else if (surplus > 0 && toNum(g.savingsShortfallCarryForward) > 0) {
+        g.savingsShortfallCarryForward = Math.max(
+          0,
+          toNum(g.savingsShortfallCarryForward) - surplus,
+        );
       }
+      await this.savingsRepo.save(g);
     }
     cycle.savingsShortfall = totalShortfall;
 

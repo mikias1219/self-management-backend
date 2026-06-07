@@ -39,11 +39,13 @@ export class SavingsGoalsService extends BaseCrudService<SavingsGoal> {
     projectedCompletionDate?: string;
   } {
     const monthly = toNum(goal.monthlyTargetAmount);
+    const carryForward = toNum(goal.savingsShortfallCarryForward);
+    const effectiveMonthly = monthly + carryForward;
     const remaining = Math.max(0, toNum(goal.targetAmount) - toNum(goal.currentAmount));
-    if (monthly <= 0 || remaining <= 0) {
+    if (effectiveMonthly <= 0 || remaining <= 0) {
       return { ...goal, projectedCompletionDate: undefined };
     }
-    const months = Math.ceil(remaining / monthly);
+    const months = Math.ceil(remaining / effectiveMonthly);
     const d = new Date();
     d.setMonth(d.getMonth() + months);
     return {

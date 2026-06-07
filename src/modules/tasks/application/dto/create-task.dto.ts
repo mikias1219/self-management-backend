@@ -10,6 +10,7 @@ import {
   Min,
 } from 'class-validator';
 import { LifeArea } from '../../../../common/domain/enums/life-area.enum';
+import { RecurringInterval } from '../../../../common/domain/enums/recurring-interval.enum';
 import { TaskPriority, TaskStatus } from '../../domain/enums/task.enums';
 
 export class CreateTaskDto {
@@ -88,4 +89,29 @@ export class CreateTaskDto {
   @IsOptional()
   @IsBoolean()
   syncToCalendar?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  completionNote?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  parentTaskId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
+
+  @ApiPropertyOptional({ enum: RecurringInterval })
+  @IsOptional()
+  @IsEnum(RecurringInterval)
+  recurringInterval?: RecurringInterval;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  timerStartedAt?: string;
 }

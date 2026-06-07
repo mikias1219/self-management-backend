@@ -1,5 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsObject, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsInt,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class UpdateUserSettingsDto {
   @ApiPropertyOptional()
@@ -49,4 +59,15 @@ export class UpdateUserSettingsDto {
   @Min(1)
   @Max(31)
   salaryDay?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  annualSavingsTarget?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  financeOnboardingCompleted?: boolean;
 }

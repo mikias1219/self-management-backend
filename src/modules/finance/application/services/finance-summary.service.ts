@@ -13,6 +13,7 @@ import {
   ExpenseClassificationType,
   TransactionType,
 } from '../../domain/enums/finance.enums';
+import { UserSettings } from '../../../settings/domain/entities/user-settings.entity';
 import { FinanceCycle } from '../../domain/entities/finance-cycle.entity';
 import { FinanceCyclesService } from './finance-cycles.service';
 
@@ -35,6 +36,8 @@ export class FinanceSummaryService {
     private readonly incomeCatRepo: Repository<IncomeCategory>,
     @InjectRepository(FinanceCycle)
     private readonly cyclesRepo: Repository<FinanceCycle>,
+    @InjectRepository(UserSettings)
+    private readonly settingsRepo: Repository<UserSettings>,
     private readonly financeCycles: FinanceCyclesService,
   ) {}
 
@@ -62,6 +65,7 @@ export class FinanceSummaryService {
     let totalExpense = 0;
     let totalTransfer = 0;
     let totalVariableExpense = 0;
+    let totalWastage = 0;
 
     const expenseByCategory = new Map<string, number>();
     const variableExpenseByCategory = new Map<string, number>();
@@ -92,6 +96,7 @@ export class FinanceSummaryService {
         incomeByCategory.set(key, (incomeByCategory.get(key) ?? 0) + amount);
       } else if (tx.transactionType === TransactionType.EXPENSE) {
         totalExpense += amount;
+        if (tx.isWastage) totalWastage += amount;
         if (isVariableExpenseTx(tx)) totalVariableExpense += amount;
         dayEntry.expense += amount;
         const key = tx.categoryId ?? 'uncategorized';
@@ -172,6 +177,22 @@ export class FinanceSummaryService {
       ? await this.financeCycles.getObligationSummary(userId, currentCycle.id)
       : { upcoming: [], overdue: [], paid: [] };
 
+    const settings = await this.settingsRepo.findOne({
+      where: { createdBy: userId },
+    });
+    const yearStart = `${new Date().getFullYear()}-01-01`;
+    const yearEnd = `${new Date().getFullYear()}-12-31`;
+    const yearTransfers = await this.txRepo.find({
+      where: {
+        createdBy: userId,
+        transactionType: TransactionType.TRANSFER,
+        transactionDate: Between(yearStart, yearEnd),
+      },
+    });
+    const annualSavingsProgress = yearTransfers
+      .filter((tx) => tx.savingsGoalId)
+      .reduce((s, tx) => s + toNum(tx.amount), 0);
+
     return {
       period: query,
       range: { start: range.start.toISOString(), end: range.end.toISOString() },
@@ -189,7 +210,24 @@ export class FinanceSummaryService {
         burnRate,
         forecastEndOfMonthExpense,
         forecastEndOfMonthNet,
+        totalWastage,
       },
+      annualPlan: settings?.annualSavingsTarget
+        ? {
+            targetAmount: toNum(settings.annualSavingsTarget),
+            currentProgress: annualSavingsProgress,
+            progressPercent:
+              toNum(settings.annualSavingsTarget) > 0
+                ? Math.round(
+                    (annualSavingsProgress /
+                      toNum(settings.annualSavingsTarget)) *
+                      1000,
+                  ) / 10
+                : 0,
+            year: new Date().getFullYear(),
+          }
+        : null,
+      financeOnboardingCompleted: settings?.financeOnboardingCompleted ?? false,
       budgets: budgets.map((b) => {
         const amount = toNum(b.amount);
         const spent = toNum(b.spent);
@@ -217,8 +255,12 @@ export class FinanceSummaryService {
         const projectedCompletionDate =
           monthly > 0 && remaining > 0
             ? (() => {
+                const carry = toNum(g.savingsShortfallCarryForward);
+                const effective = monthly + carry;
                 const d = new Date();
-                d.setMonth(d.getMonth() + Math.ceil(remaining / monthly));
+                d.setMonth(
+                  d.getMonth() + Math.ceil(remaining / effective),
+                );
                 return d.toISOString().slice(0, 10);
               })()
             : undefined;

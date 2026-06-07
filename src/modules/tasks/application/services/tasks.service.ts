@@ -3,12 +3,28 @@ import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import type { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { invalidateDashboardOverview } from '../../../../common/utils/dashboard-cache.util';
-import { endOfDay, format } from 'date-fns';
-import { DeepPartial, Repository } from 'typeorm';
+import {
+  addMonths,
+  addWeeks,
+  addYears,
+  endOfDay,
+  format,
+  startOfDay,
+} from 'date-fns';
+import {
+  Between,
+  DeepPartial,
+  FindOptionsWhere,
+  IsNull,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import {
   ActivityAction,
   ActivityModule,
 } from '../../../../common/domain/enums/activity-action.enum';
+import { RecurringInterval } from '../../../../common/domain/enums/recurring-interval.enum';
 import { BaseCrudService } from '../../../../common/services/base-crud.service';
 import { ActivityLogsService } from '../../../activity-logs/application/services/activity-logs.service';
 import { LifeArea } from '../../../../common/domain/enums/life-area.enum';
@@ -17,6 +33,7 @@ import { GoogleCalendarService } from '../../../integrations/application/service
 import { Task } from '../../domain/entities/task.entity';
 import { TaskStatus } from '../../domain/enums/task.enums';
 import { ReportTaskDto } from '../dto/report-task.dto';
+import { TaskQueryDto } from '../dto/task-query.dto';
 
 @Injectable()
 export class TasksService extends BaseCrudService<Task> {
@@ -34,6 +51,162 @@ export class TasksService extends BaseCrudService<Task> {
       module: ActivityModule.TASKS,
       entityType: 'Task',
     });
+  }
+
+  async findAllFiltered(
+    userId: string,
+    query: TaskQueryDto,
+  ): Promise<Task[]> {
+    await this.ensureRecurringInstances(userId);
+
+    const where: FindOptionsWhere<Task> = { createdBy: userId };
+
+    if (query.taskStatus) where.taskStatus = query.taskStatus;
+    if (query.lifeArea) where.lifeArea = query.lifeArea;
+    if (query.parentTaskId) where.parentTaskId = query.parentTaskId;
+    if (query.topLevelOnly) where.parentTaskId = IsNull();
+    if (query.recurringOnly) {
+      where.isRecurring = true;
+      where.recurringParentId = IsNull();
+    }
+    if (query.completedFrom && query.completedTo) {
+      where.completedAt = Between(
+        startOfDay(new Date(query.completedFrom)),
+        endOfDay(new Date(query.completedTo)),
+      );
+    } else if (query.completedFrom) {
+      where.completedAt = MoreThanOrEqual(
+        startOfDay(new Date(query.completedFrom)),
+      );
+    } else if (query.completedTo) {
+      where.completedAt = LessThanOrEqual(
+        endOfDay(new Date(query.completedTo)),
+      );
+    }
+    if (query.dueFrom && query.dueTo) {
+      where.dueDate = Between(
+        startOfDay(new Date(query.dueFrom)),
+        endOfDay(new Date(query.dueTo)),
+      );
+    } else if (query.dueFrom) {
+      where.dueDate = MoreThanOrEqual(startOfDay(new Date(query.dueFrom)));
+    } else if (query.dueTo) {
+      where.dueDate = LessThanOrEqual(endOfDay(new Date(query.dueTo)));
+    }
+    if (query.scheduledFrom && query.scheduledTo) {
+      where.scheduledAt = Between(
+        startOfDay(new Date(query.scheduledFrom)),
+        endOfDay(new Date(query.scheduledTo)),
+      );
+    } else if (query.scheduledFrom) {
+      where.scheduledAt = MoreThanOrEqual(
+        startOfDay(new Date(query.scheduledFrom)),
+      );
+    } else if (query.scheduledTo) {
+      where.scheduledAt = LessThanOrEqual(
+        endOfDay(new Date(query.scheduledTo)),
+      );
+    }
+
+    return this.repository.find({
+      where,
+      relations: {
+        goal: true,
+        habit: true,
+        parentTask: true,
+        recurringParent: true,
+      },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /** Generate recurring task instances on demand (no cron). */
+  async ensureRecurringInstances(userId: string): Promise<void> {
+    const templates = await this.repository.find({
+      where: {
+        createdBy: userId,
+        isRecurring: true,
+        recurringParentId: IsNull(),
+        taskStatus: TaskStatus.TODO,
+      },
+    });
+
+    const now = new Date();
+    for (const template of templates) {
+      if (
+        !template.recurringInterval ||
+        template.recurringInterval === RecurringInterval.NONE
+      ) {
+        continue;
+      }
+
+      const anchor =
+        template.lastRecurringGeneratedAt ??
+        template.scheduledAt ??
+        template.dueDate ??
+        template.createdAt;
+      if (!anchor) continue;
+
+      const nextDue = this.nextRecurringDate(
+        new Date(anchor),
+        template.recurringInterval,
+      );
+      if (nextDue > now) continue;
+
+      const exists = await this.repository.findOne({
+        where: {
+          createdBy: userId,
+          recurringParentId: template.id,
+          dueDate: Between(startOfDay(nextDue), endOfDay(nextDue)),
+        },
+      });
+      if (exists) {
+        template.lastRecurringGeneratedAt = nextDue;
+        await this.repository.save(template);
+        continue;
+      }
+
+      const instance = this.repository.create({
+        createdBy: userId,
+        title: template.title,
+        description: template.description,
+        priority: template.priority,
+        taskStatus: TaskStatus.TODO,
+        lifeArea: template.lifeArea,
+        category: template.category,
+        estimatedMinutes: template.estimatedMinutes,
+        goalId: template.goalId,
+        syncToCalendar: template.syncToCalendar,
+        recurringParentId: template.id,
+        dueDate: endOfDay(nextDue),
+        scheduledAt: nextDue,
+      });
+      await this.repository.save(instance);
+      template.lastRecurringGeneratedAt = nextDue;
+      await this.repository.save(template);
+    }
+  }
+
+  private nextRecurringDate(from: Date, interval: RecurringInterval): Date {
+    switch (interval) {
+      case RecurringInterval.WEEKLY:
+        return addWeeks(from, 1);
+      case RecurringInterval.MONTHLY:
+        return addMonths(from, 1);
+      case RecurringInterval.YEARLY:
+        return addYears(from, 1);
+      default:
+        return from;
+    }
+  }
+
+  async startTimer(userId: string, id: string): Promise<Task> {
+    const task = await this.findOneForUser(userId, id);
+    task.timerStartedAt = new Date();
+    if (task.taskStatus === TaskStatus.TODO) {
+      task.taskStatus = TaskStatus.IN_PROGRESS;
+    }
+    return this.repository.save(task);
   }
 
   override async create(
@@ -126,6 +299,18 @@ export class TasksService extends BaseCrudService<Task> {
     task.timeSpentMinutes = dto.timeSpentMinutes;
     task.taskStatus = TaskStatus.DONE;
     task.completedAt = new Date();
+    if (dto.completionNote) {
+      task.completionNote = dto.completionNote;
+    } else if (dto.notes) {
+      task.completionNote = dto.notes;
+    }
+    if (task.timerStartedAt && dto.timeSpentMinutes === 0) {
+      const elapsed = Math.round(
+        (Date.now() - new Date(task.timerStartedAt).getTime()) / 60000,
+      );
+      if (elapsed > 0) task.timeSpentMinutes = elapsed;
+    }
+    task.timerStartedAt = undefined;
     let saved = await this.repository.save(task);
     await this.logTaskCompletion(userId, saved, dto.notes);
     saved = await this.persistCalendarSync(userId, saved);

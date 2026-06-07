@@ -25,6 +25,7 @@ import { ProductivityModule } from './modules/productivity/productivity.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { SpiritualModule } from './modules/spiritual/spiritual.module';
 import { TasksModule } from './modules/tasks/tasks.module';
+import { TimelineModule } from './modules/timeline/timeline.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -37,6 +38,7 @@ import { AppService } from './app.service';
     ActivityLogsModule,
     AuthModule,
     TasksModule,
+    TimelineModule,
     GoalsModule,
     HabitsModule,
     DailyReviewsModule,

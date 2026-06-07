@@ -47,6 +47,11 @@ export class FinanceCyclesController {
     );
   }
 
+  @Get(':id/detail')
+  getDetail(@CurrentUser() user: AuthUserPayload, @Param('id') id: string) {
+    return this.service.getCycleDetail(user.sub, id);
+  }
+
   @Get(':id')
   getOne(@CurrentUser() user: AuthUserPayload, @Param('id') id: string) {
     return this.service.getOneForUser(user.sub, id);

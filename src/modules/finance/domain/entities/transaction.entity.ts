@@ -6,6 +6,7 @@ import { RecurringInterval } from '../../../../common/domain/enums/recurring-int
 import { BaseEntity } from '../../../../common/domain/base.entity';
 import { TransactionType } from '../enums/finance.enums';
 import { ExpenseCategory } from './expense-category.entity';
+import { FinanceCycle } from './finance-cycle.entity';
 import { SavingsGoal } from './savings-goal.entity';
 
 @Entity('finance_transactions')
@@ -50,6 +51,13 @@ export class FinanceTransaction extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   cycleId?: string;
+
+  @ManyToOne(() => FinanceCycle, (cycle) => cycle.transactions, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'cycleId' })
+  cycle?: FinanceCycle;
 
   @Column({ type: 'uuid', nullable: true })
   pendingObligationId?: string;
@@ -102,4 +110,10 @@ export class FinanceTransaction extends BaseEntity {
   @ManyToOne(() => SavingsGoal, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'savingsGoalId' })
   savingsGoal?: SavingsGoal;
+
+  @Column({ default: false })
+  isWastage: boolean;
+
+  @Column({ default: false })
+  isPartialPayment: boolean;
 }

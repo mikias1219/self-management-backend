@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { Goal } from '../../../goals/domain/entities/goal.entity';
 import { Habit } from '../../../habits/domain/entities/habit.entity';
 import { LifeArea } from '../../../../common/domain/enums/life-area.enum';
+import { RecurringInterval } from '../../../../common/domain/enums/recurring-interval.enum';
 import { BaseEntity } from '../../../../common/domain/base.entity';
 import { TaskPriority, TaskStatus } from '../enums/task.enums';
 
@@ -66,4 +67,37 @@ export class Task extends BaseEntity {
 
   @Column({ nullable: true })
   googleCalendarEventId?: string;
+
+  @Column({ type: 'text', nullable: true })
+  completionNote?: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  parentTaskId?: string;
+
+  @ManyToOne(() => Task, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'parentTaskId' })
+  parentTask?: Task;
+
+  @Column({ default: false })
+  isRecurring: boolean;
+
+  @Column({
+    type: 'enum',
+    enum: RecurringInterval,
+    default: RecurringInterval.NONE,
+  })
+  recurringInterval: RecurringInterval;
+
+  @Column({ type: 'uuid', nullable: true })
+  recurringParentId?: string;
+
+  @ManyToOne(() => Task, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'recurringParentId' })
+  recurringParent?: Task;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  timerStartedAt?: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastRecurringGeneratedAt?: Date;
 }

@@ -125,6 +125,7 @@ export class LifeIntelligenceService {
         netBalance: weekTotals.netCashFlow,
       },
       burnRate: monthTotals.burnRate,
+      totalWastage: monthSummary.totals.totalWastage ?? 0,
       forecast: {
         endOfMonthExpense: monthTotals.forecastEndOfMonthExpense,
         endOfMonthNet: monthTotals.forecastEndOfMonthNet,
@@ -478,25 +479,35 @@ export class LifeIntelligenceService {
     tasks: Awaited<ReturnType<LifeIntelligenceService['getTaskIntelligence']>>;
     productivityScore: number;
     financialHealthScore: number;
-  }): string {
+  }): { text: string; actionType: string; actionHref: string } {
     const lines: string[] = [];
+    let actionType = 'tasks';
+    let actionHref = '/productivity?tab=tasks';
 
     if (input.tasks.overdue.length > 0) {
       lines.push(
         `You have ${input.tasks.overdue.length} overdue task(s) — tackle "${input.tasks.overdue[0]?.title}" first.`,
       );
+      actionType = 'tasks';
+      actionHref = '/productivity?tab=tasks';
     } else if (input.tasks.focusToday.length > 0) {
       lines.push(
         `Focus on "${input.tasks.focusToday[0]?.title}" among ${input.tasks.focusToday.length} task(s) due today.`,
       );
+      actionType = 'today';
+      actionHref = '/today';
     } else {
       lines.push('No urgent tasks due today — good window for goals or habits.');
+      actionType = 'goals';
+      actionHref = '/productivity?tab=goals';
     }
 
     if (input.finance.monthly.savingsRate < 10 && input.finance.monthly.expense > 0) {
       lines.push(
         `Savings rate is ${input.finance.monthly.savingsRate}%${input.finance.topOverspendCategory ? `; watch spending on ${input.finance.topOverspendCategory}.` : '.'}`,
       );
+      actionType = 'finance';
+      actionHref = '/life?tab=finance';
     } else if (input.finance.forecast.endOfMonthNet >= 0) {
       lines.push(
         `On track for month-end with ~${input.finance.forecast.endOfMonthNet} ${input.finance.currency} projected net.`,
@@ -509,6 +520,10 @@ export class LifeIntelligenceService {
       );
     }
 
-    return lines.slice(0, 2).join(' ');
+    return {
+      text: lines.slice(0, 2).join(' '),
+      actionType,
+      actionHref,
+    };
   }
 }

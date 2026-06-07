@@ -1,6 +1,8 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { AuditableEntity } from '../../../../common/domain/auditable.entity';
 import { FinanceCycleStatus } from '../enums/finance.enums';
+import { FinanceTransaction } from './transaction.entity';
+import { PendingObligation } from './pending-obligation.entity';
 
 @Entity('finance_cycles')
 @Index(['createdBy', 'startDate'])
@@ -70,5 +72,11 @@ export class FinanceCycle extends AuditableEntity {
   // Close metadata
   @Column({ type: 'timestamptz', nullable: true })
   closedAt?: Date | null;
+
+  @OneToMany(() => FinanceTransaction, (tx) => tx.cycle)
+  transactions?: FinanceTransaction[];
+
+  @OneToMany(() => PendingObligation, (o) => o.cycle)
+  pendingObligations?: PendingObligation[];
 }
 

@@ -15,4 +15,9 @@ export class ReportTaskDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'What was actually achieved' })
+  @IsOptional()
+  @IsString()
+  completionNote?: string;
 }
