@@ -1,8 +1,11 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -70,7 +73,44 @@ export class AiChatService {
     private readonly actions: AiActionsService,
     @InjectRepository(AiCoachSession)
     private readonly sessionsRepo: Repository<AiCoachSession>,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
+
+  async getModuleInsight(userId: string, moduleKey: string) {
+    const cacheKey = `ai:module-insight:${userId}:${moduleKey}`;
+    const cached = await this.cache.get<string>(cacheKey);
+    if (cached) return { insight: cached };
+
+    const ctx = await this.contextService.buildForUser(userId);
+    let insight = 'Keep going — small consistent steps add up.';
+    if (moduleKey === 'finance') {
+      const expense = ctx.intelligence?.monthlyTrend?.expense ?? 0;
+      insight =
+        expense > 0
+          ? `You've spent ${expense} this month. Check your top categories before adding more.`
+          : 'Log your first expense to start tracking your budget.';
+    } else if (moduleKey === 'goals') {
+      const goalItems = ctx.goals?.items ?? [];
+      const open = goalItems.filter((g) => (g.progressPercent ?? 0) < 100).length;
+      insight =
+        open > 0
+          ? `You have ${open} active goals. Link tasks to make progress visible.`
+          : 'Set a weekly target to give your tasks direction.';
+    } else if (moduleKey === 'tasks') {
+      const overdue = Array.isArray(ctx.tasks?.overdue)
+        ? ctx.tasks.overdue.length
+        : Number(ctx.tasks?.counts?.open ?? 0);
+      insight =
+        overdue > 0
+          ? `${overdue} task(s) need attention. Tackle the smallest one first.`
+          : 'Your task list looks clear — add one meaningful item for today.';
+    } else if (moduleKey === 'learning') {
+      insight = 'Schedule 30 minutes of focused study to stay on track.';
+    }
+
+    await this.cache.set(cacheKey, insight, 4 * 60 * 60 * 1000);
+    return { insight };
+  }
 
   async chat(userId: string, message: string, sessionId?: string) {
     const apiKey = this.config.get<string>('openApiKey');

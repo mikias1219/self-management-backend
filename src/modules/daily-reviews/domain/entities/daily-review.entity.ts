@@ -24,4 +24,7 @@ export class DailyReview extends BaseEntity {
 
   @Column({ type: 'int', nullable: true })
   productivityScore?: number;
+
+  @Column({ type: 'varchar', length: 20, default: 'daily' })
+  reviewType: string;
 }

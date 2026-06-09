@@ -90,6 +90,12 @@ export class CreateTaskDto {
   @IsBoolean()
   syncToCalendar?: boolean;
 
+  /** Link to an existing Google Calendar event (import from calendar without duplicating). */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  googleCalendarEventId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

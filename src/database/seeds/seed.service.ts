@@ -1,48 +1,41 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import { addMonths, format, subDays } from 'date-fns';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
+import { IncomeSource } from '../../common/domain/enums/income-source.enum';
 import { EntityStatus } from '../../common/domain/enums/entity-status.enum';
-import { AiCoachSession } from '../../modules/ai-coach/domain/entities/ai-coach-session.entity';
-import { DailyReview } from '../../modules/daily-reviews/domain/entities/daily-review.entity';
-import { EnglishPractice } from '../../modules/english/domain/entities/english-practice.entity';
-import { EnglishPracticeType } from '../../modules/english/domain/enums/english.enums';
+import { Notification } from '../../modules/notifications/domain/entities/notification.entity';
+import { UserSettings } from '../../modules/settings/domain/entities/user-settings.entity';
 import { FinanceAccount } from '../../modules/finance/domain/entities/account.entity';
 import { ExpenseCategory } from '../../modules/finance/domain/entities/expense-category.entity';
 import { FinanceBudget } from '../../modules/finance/domain/entities/budget.entity';
+import { FinanceCycle } from '../../modules/finance/domain/entities/finance-cycle.entity';
 import { IncomeCategory } from '../../modules/finance/domain/entities/income-category.entity';
+import { PendingObligation } from '../../modules/finance/domain/entities/pending-obligation.entity';
+import { RecurringObligation } from '../../modules/finance/domain/entities/recurring-obligation.entity';
 import { SavingsGoal } from '../../modules/finance/domain/entities/savings-goal.entity';
 import { FinanceTransaction } from '../../modules/finance/domain/entities/transaction.entity';
 import {
   AccountType,
+  ExpenseClassificationType,
+  FinanceCycleStatus,
+  PendingObligationStatus,
   TransactionType,
 } from '../../modules/finance/domain/enums/finance.enums';
-import { Goal } from '../../modules/goals/domain/entities/goal.entity';
-import { GoalLevel } from '../../modules/goals/domain/enums/goal.enums';
-import { HabitLog } from '../../modules/habits/domain/entities/habit-log.entity';
-import { Habit } from '../../modules/habits/domain/entities/habit.entity';
-import { HabitFrequency } from '../../modules/habits/domain/enums/habit.enums';
-import { HealthLog } from '../../modules/health/domain/entities/health-log.entity';
-import { HealthMetricType } from '../../modules/health/domain/enums/health.enums';
-import { Book } from '../../modules/learning/domain/entities/book.entity';
-import { Course } from '../../modules/learning/domain/entities/course.entity';
-import { LearningProject } from '../../modules/learning/domain/entities/learning-project.entity';
-import { Skill } from '../../modules/learning/domain/entities/skill.entity';
-import { StudySession } from '../../modules/learning/domain/entities/study-session.entity';
-import { LearningItemStatus } from '../../modules/learning/domain/enums/learning.enums';
-import { JournalEntry } from '../../modules/journal/domain/entities/journal-entry.entity';
-import { JournalEntryType } from '../../modules/journal/domain/enums/journal.enums';
-import { Notification } from '../../modules/notifications/domain/entities/notification.entity';
-import { UserSettings } from '../../modules/settings/domain/entities/user-settings.entity';
-import { SpiritualActivity } from '../../modules/spiritual/domain/entities/spiritual-activity.entity';
-import { SpiritualActivityType } from '../../modules/spiritual/domain/enums/spiritual.enums';
-import { Task } from '../../modules/tasks/domain/entities/task.entity';
-import { TaskPriority, TaskStatus } from '../../modules/tasks/domain/enums/task.enums';
 import { User } from '../../modules/users/domain/entities/user.entity';
 
-const DEMO_EMAIL = 'demo@lifeos.app';
-const DEMO_PASSWORD = 'LifeOS2026!';
+const SALARY_ETB = 16_000;
+const SALARY_DAY = 10;
+const RENT_ETB = 7_500;
+const OIL_ETB = 500;
+const SAVINGS_ETB = 2_000;
+const FOOD_ETB = 2_000;
+const FRUIT_ETB = 500;
+const FIXED_ETB = RENT_ETB + OIL_ETB;
+const OTHER_ETB =
+  SALARY_ETB - FIXED_ETB - SAVINGS_ETB - FOOD_ETB - FRUIT_ETB;
 
 @Injectable()
 export class SeedService implements OnModuleInit {
@@ -51,29 +44,17 @@ export class SeedService implements OnModuleInit {
   constructor(
     private readonly config: ConfigService,
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
-    @InjectRepository(Task) private readonly tasksRepo: Repository<Task>,
-    @InjectRepository(Goal) private readonly goalsRepo: Repository<Goal>,
-    @InjectRepository(Habit) private readonly habitsRepo: Repository<Habit>,
-    @InjectRepository(HabitLog) private readonly habitLogsRepo: Repository<HabitLog>,
-    @InjectRepository(DailyReview) private readonly dailyReviewsRepo: Repository<DailyReview>,
-    @InjectRepository(Skill) private readonly skillsRepo: Repository<Skill>,
-    @InjectRepository(Course) private readonly coursesRepo: Repository<Course>,
-    @InjectRepository(Book) private readonly booksRepo: Repository<Book>,
-    @InjectRepository(LearningProject) private readonly projectsRepo: Repository<LearningProject>,
-    @InjectRepository(StudySession) private readonly studySessionsRepo: Repository<StudySession>,
+    @InjectRepository(UserSettings) private readonly settingsRepo: Repository<UserSettings>,
     @InjectRepository(FinanceAccount) private readonly accountsRepo: Repository<FinanceAccount>,
     @InjectRepository(FinanceTransaction) private readonly transactionsRepo: Repository<FinanceTransaction>,
     @InjectRepository(FinanceBudget) private readonly budgetsRepo: Repository<FinanceBudget>,
     @InjectRepository(SavingsGoal) private readonly savingsGoalsRepo: Repository<SavingsGoal>,
     @InjectRepository(ExpenseCategory) private readonly expenseCategoriesRepo: Repository<ExpenseCategory>,
     @InjectRepository(IncomeCategory) private readonly incomeCategoriesRepo: Repository<IncomeCategory>,
-    @InjectRepository(EnglishPractice) private readonly englishRepo: Repository<EnglishPractice>,
-    @InjectRepository(SpiritualActivity) private readonly spiritualRepo: Repository<SpiritualActivity>,
-    @InjectRepository(HealthLog) private readonly healthRepo: Repository<HealthLog>,
-    @InjectRepository(JournalEntry) private readonly journalRepo: Repository<JournalEntry>,
+    @InjectRepository(RecurringObligation) private readonly recurringRepo: Repository<RecurringObligation>,
+    @InjectRepository(FinanceCycle) private readonly cyclesRepo: Repository<FinanceCycle>,
+    @InjectRepository(PendingObligation) private readonly pendingRepo: Repository<PendingObligation>,
     @InjectRepository(Notification) private readonly notificationsRepo: Repository<Notification>,
-    @InjectRepository(UserSettings) private readonly settingsRepo: Repository<UserSettings>,
-    @InjectRepository(AiCoachSession) private readonly aiCoachRepo: Repository<AiCoachSession>,
   ) {}
 
   async onModuleInit() {
@@ -81,162 +62,102 @@ export class SeedService implements OnModuleInit {
     await this.seed();
   }
 
+  private cycleEndFromStart(start: Date, salaryDay: number): string {
+    const nextMonth = addMonths(start, 1);
+    const nextSalary = new Date(
+      nextMonth.getFullYear(),
+      nextMonth.getMonth(),
+      salaryDay,
+    );
+    return format(subDays(nextSalary, 1), 'yyyy-MM-dd');
+  }
+
+  private nextCycleStart(salaryDay: number, today = new Date()): Date {
+    const candidate = new Date(today.getFullYear(), today.getMonth(), salaryDay);
+    if (candidate > today) return candidate;
+    return addMonths(candidate, 1);
+  }
+
+  private dueDateInCycle(
+    cycleStart: string,
+    cycleEnd: string,
+    dueDay: number,
+  ): string {
+    const start = new Date(cycleStart);
+    const clampedDay = Math.min(
+      dueDay,
+      new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate(),
+    );
+    const candidate = format(
+      new Date(start.getFullYear(), start.getMonth(), clampedDay),
+      'yyyy-MM-dd',
+    );
+    if (candidate >= cycleStart && candidate <= cycleEnd) return candidate;
+    const next = addMonths(start, 1);
+    const nextClamped = Math.min(
+      dueDay,
+      new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate(),
+    );
+    return format(
+      new Date(next.getFullYear(), next.getMonth(), nextClamped),
+      'yyyy-MM-dd',
+    );
+  }
+
   async seed() {
-    const existing = await this.usersRepo.findOne({ where: { email: DEMO_EMAIL } });
-    if (existing) {
-      this.logger.log('Demo user already exists, skipping seed');
+    const email = this.config.get<string>('seedUser.email') ?? '';
+    const password = this.config.get<string>('seedUser.password') ?? '';
+    const displayName =
+      this.config.get<string>('seedUser.displayName') ?? 'Mikiyas';
+
+    if (!email || !password) {
+      this.logger.warn(
+        'SEED_USER_EMAIL / SEED_USER_PASSWORD not set — skipping seed',
+      );
       return;
     }
 
-    const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+    const existing = await this.usersRepo.findOne({ where: { email } });
+    if (existing) {
+      this.logger.log(`Seed user already exists (${email}), skipping seed`);
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
     const user = await this.usersRepo.save(
       this.usersRepo.create({
-        email: DEMO_EMAIL,
+        email,
         passwordHash,
-        displayName: 'Demo User',
-        timezone: 'UTC',
+        displayName,
+        timezone: 'Africa/Addis_Ababa',
+        primaryCurrency: 'ETB',
         status: EntityStatus.ACTIVE,
       }),
     );
     const userId = user.id;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date();
+    const nextSalary = this.nextCycleStart(SALARY_DAY, today);
+    const cycleStartStr = format(nextSalary, 'yyyy-MM-dd');
+    const cycleEndStr = this.cycleEndFromStart(nextSalary, SALARY_DAY);
+    const salaryAlreadyReceived = today.getDate() >= SALARY_DAY;
 
-    const yearlyGoal = await this.goalsRepo.save(
-      this.goalsRepo.create({
-        title: 'Build LifeOS mastery',
-        level: GoalLevel.YEARLY,
-        progress: 25,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.tasksRepo.save([
-      this.tasksRepo.create({
-        title: 'Review daily goals',
-        priority: TaskPriority.HIGH,
-        taskStatus: TaskStatus.TODO,
-        dueDate: new Date(),
-        goalId: yearlyGoal.id,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-      this.tasksRepo.create({
-        title: 'Complete morning routine',
-        priority: TaskPriority.MEDIUM,
-        taskStatus: TaskStatus.DONE,
-        completedAt: new Date(),
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    ]);
-
-    const habit = await this.habitsRepo.save(
-      this.habitsRepo.create({
-        name: 'Morning meditation',
-        frequency: HabitFrequency.DAILY,
-        currentStreak: 3,
-        bestStreak: 7,
-        color: '#4CAF50',
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.habitLogsRepo.save(
-      this.habitLogsRepo.create({
-        habitId: habit.id,
-        completedAt: new Date(),
-        notes: 'Felt focused',
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.dailyReviewsRepo.save(
-      this.dailyReviewsRepo.create({
-        reviewDate: today,
-        wins: 'Completed key tasks',
-        challenges: 'Time management',
-        lessons: 'Plan the night before',
-        moodScore: 8,
-        productivityScore: 7,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    const skill = await this.skillsRepo.save(
-      this.skillsRepo.create({
-        name: 'TypeScript',
-        proficiency: 70,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    const course = await this.coursesRepo.save(
-      this.coursesRepo.create({
-        title: 'Advanced NestJS',
-        platform: 'Udemy',
-        learningStatus: LearningItemStatus.IN_PROGRESS,
-        progress: 40,
-        hoursSpent: 12,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.booksRepo.save(
-      this.booksRepo.create({
-        title: 'Atomic Habits',
-        author: 'James Clear',
-        learningStatus: LearningItemStatus.IN_PROGRESS,
-        pagesRead: 120,
-        totalPages: 320,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.projectsRepo.save(
-      this.projectsRepo.create({
-        name: 'LifeOS Backend',
-        learningStatus: LearningItemStatus.IN_PROGRESS,
-        progress: 60,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.studySessionsRepo.save(
-      this.studySessionsRepo.create({
-        sessionDate: today,
-        durationMinutes: 45,
-        topic: 'NestJS modules',
-        skillId: skill.id,
-        courseId: course.id,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    const account = await this.accountsRepo.save(
+    await this.accountsRepo.save(
       this.accountsRepo.create({
-        name: 'Main Checking',
+        name: 'IE Salary',
         accountType: AccountType.CHECKING,
-        balance: 5000,
+        balance: salaryAlreadyReceived ? SALARY_ETB : 0,
         currency: 'ETB',
         createdBy: userId,
         status: EntityStatus.ACTIVE,
       }),
     );
 
-    const expenseCategory = await this.expenseCategoriesRepo.save(
-      this.expenseCategoriesRepo.create({
-        name: 'Food',
-        icon: 'restaurant',
-        color: '#FF5722',
+    await this.accountsRepo.save(
+      this.accountsRepo.create({
+        name: 'My Saving',
+        accountType: AccountType.SAVINGS,
+        balance: 0,
+        currency: 'ETB',
         createdBy: userId,
         status: EntityStatus.ACTIVE,
       }),
@@ -246,98 +167,133 @@ export class SeedService implements OnModuleInit {
       this.incomeCategoriesRepo.create({
         name: 'Salary',
         icon: 'payments',
-        color: '#4CAF50',
+        color: '#22c55e',
         createdBy: userId,
         status: EntityStatus.ACTIVE,
       }),
     );
 
-    await this.transactionsRepo.save(
-      this.transactionsRepo.create({
-        accountId: account.id,
-        transactionType: TransactionType.EXPENSE,
-        amount: 45.5,
-        transactionDate: today,
-        description: 'Groceries',
-        categoryId: expenseCategory.id,
+    const rentCat = await this.expenseCategoriesRepo.save(
+      this.expenseCategoriesRepo.create({
+        name: 'Rent',
+        icon: 'home',
+        color: '#ef4444',
+        classificationType: ExpenseClassificationType.FIXED_OBLIGATION,
+        dueDay: 1,
+        expectedAmount: RENT_ETB,
         createdBy: userId,
         status: EntityStatus.ACTIVE,
       }),
     );
 
-    await this.budgetsRepo.save(
+    const oilCat = await this.expenseCategoriesRepo.save(
+      this.expenseCategoriesRepo.create({
+        name: 'Oil',
+        icon: 'local_gas_station',
+        color: '#f97316',
+        classificationType: ExpenseClassificationType.FIXED_OBLIGATION,
+        dueDay: 10,
+        expectedAmount: OIL_ETB,
+        createdBy: userId,
+        status: EntityStatus.ACTIVE,
+      }),
+    );
+
+    const foodCat = await this.expenseCategoriesRepo.save(
+      this.expenseCategoriesRepo.create({
+        name: 'Food',
+        icon: 'restaurant',
+        color: '#eab308',
+        classificationType: ExpenseClassificationType.VARIABLE_NECESSITY,
+        createdBy: userId,
+        status: EntityStatus.ACTIVE,
+      }),
+    );
+
+    const fruitCat = await this.expenseCategoriesRepo.save(
+      this.expenseCategoriesRepo.create({
+        name: 'Fruit',
+        icon: 'nutrition',
+        color: '#84cc16',
+        classificationType: ExpenseClassificationType.VARIABLE_NECESSITY,
+        createdBy: userId,
+        status: EntityStatus.ACTIVE,
+      }),
+    );
+
+    const otherCat = await this.expenseCategoriesRepo.save(
+      this.expenseCategoriesRepo.create({
+        name: 'Other',
+        icon: 'more_horiz',
+        color: '#a855f7',
+        classificationType: ExpenseClassificationType.DISCRETIONARY,
+        createdBy: userId,
+        status: EntityStatus.ACTIVE,
+      }),
+    );
+
+    const rentRecurring = await this.recurringRepo.save(
+      this.recurringRepo.create({
+        name: 'Rent',
+        amount: RENT_ETB,
+        dueDayOfMonth: 1,
+        isActive: true,
+        createdBy: userId,
+        status: EntityStatus.ACTIVE,
+      }),
+    );
+
+    const oilRecurring = await this.recurringRepo.save(
+      this.recurringRepo.create({
+        name: 'Oil',
+        amount: OIL_ETB,
+        dueDayOfMonth: 10,
+        isActive: true,
+        createdBy: userId,
+        status: EntityStatus.ACTIVE,
+      }),
+    );
+
+    await this.budgetsRepo.save([
       this.budgetsRepo.create({
-        name: 'Monthly Food',
-        amount: 500,
-        spent: 120,
-        periodStart: today.slice(0, 8) + '01',
-        periodEnd: today,
-        categoryId: expenseCategory.id,
+        name: 'Food',
+        amount: FOOD_ETB,
+        spent: 0,
+        periodStart: cycleStartStr,
+        periodEnd: cycleEndStr,
+        categoryId: foodCat.id,
         createdBy: userId,
         status: EntityStatus.ACTIVE,
       }),
-    );
+      this.budgetsRepo.create({
+        name: 'Fruit',
+        amount: FRUIT_ETB,
+        spent: 0,
+        periodStart: cycleStartStr,
+        periodEnd: cycleEndStr,
+        categoryId: fruitCat.id,
+        createdBy: userId,
+        status: EntityStatus.ACTIVE,
+      }),
+      this.budgetsRepo.create({
+        name: 'Other',
+        amount: OTHER_ETB,
+        spent: 0,
+        periodStart: cycleStartStr,
+        periodEnd: cycleEndStr,
+        categoryId: otherCat.id,
+        createdBy: userId,
+        status: EntityStatus.ACTIVE,
+      }),
+    ]);
 
     await this.savingsGoalsRepo.save(
       this.savingsGoalsRepo.create({
-        name: 'Emergency Fund',
-        targetAmount: 10000,
-        currentAmount: 2500,
-        targetDate: `${new Date().getFullYear()}-12-31`,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.englishRepo.save(
-      this.englishRepo.create({
-        practiceType: EnglishPracticeType.SPEAKING,
-        practiceDate: today,
-        durationMinutes: 30,
-        score: 85,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.spiritualRepo.save(
-      this.spiritualRepo.create({
-        activityType: SpiritualActivityType.PRAYER,
-        activityDate: today,
-        durationMinutes: 15,
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.healthRepo.save(
-      this.healthRepo.create({
-        metricType: HealthMetricType.STEPS,
-        logDate: today,
-        value: 8500,
-        unit: 'steps',
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.journalRepo.save(
-      this.journalRepo.create({
-        entryType: JournalEntryType.GRATITUDE,
-        entryDate: today,
-        title: 'Grateful today',
-        content: 'Grateful for progress on LifeOS.',
-        tags: ['gratitude', 'lifeos'],
-        createdBy: userId,
-        status: EntityStatus.ACTIVE,
-      }),
-    );
-
-    await this.notificationsRepo.save(
-      this.notificationsRepo.create({
-        title: 'Welcome to LifeOS',
-        message: 'Your demo account is ready. Explore all modules!',
-        isRead: false,
+        name: 'My Saving',
+        targetAmount: 24_000,
+        currentAmount: 0,
+        monthlyTargetAmount: SAVINGS_ETB,
+        targetDate: `${today.getFullYear()}-12-31`,
         createdBy: userId,
         status: EntityStatus.ACTIVE,
       }),
@@ -345,17 +301,26 @@ export class SeedService implements OnModuleInit {
 
     await this.settingsRepo.save(
       this.settingsRepo.create({
-        timezone: this.config.get<string>('calendar.defaultTimezone') ?? 'Africa/Nairobi',
+        timezone: 'Africa/Addis_Ababa',
         locale: 'en',
-        theme: 'light',
-        modulePreferences: { accentColor: 'teal' },
+        theme: 'system',
+        salaryDay: SALARY_DAY,
+        annualSavingsTarget: 24_000,
+        financeOnboardingCompleted: true,
+        modulePreferences: {
+          accentColor: 'teal',
+          financeAdvancedCycleMode: true,
+        },
         notificationPreferences: { email: true, push: false },
         integrations: {
           calendarFeed: {
-            embedSrc: this.config.get<string>('calendar.defaultEmbedSrc') || undefined,
-            icalFeedUrl: this.config.get<string>('calendar.defaultIcalUrl') || undefined,
+            embedSrc:
+              this.config.get<string>('calendar.defaultEmbedSrc') || email,
+            icalFeedUrl:
+              this.config.get<string>('calendar.defaultIcalUrl') || undefined,
             timezone:
-              this.config.get<string>('calendar.defaultTimezone') ?? 'Africa/Nairobi',
+              this.config.get<string>('calendar.defaultTimezone') ??
+              'Africa/Addis_Ababa',
           },
         },
         createdBy: userId,
@@ -363,22 +328,90 @@ export class SeedService implements OnModuleInit {
       }),
     );
 
-    await this.aiCoachRepo.save(
-      this.aiCoachRepo.create({
-        title: 'Weekly planning session',
-        context: 'Planning the week ahead',
-        messages: [
-          {
-            role: 'user',
-            content: 'Help me plan my week',
-            createdAt: new Date().toISOString(),
-          },
-        ],
+    if (salaryAlreadyReceived) {
+      const salaryAccount = await this.accountsRepo.findOne({
+        where: { createdBy: userId, name: 'IE Salary' },
+      });
+      const cycle = await this.cyclesRepo.save(
+        this.cyclesRepo.create({
+          createdBy: userId,
+          startDate: format(
+            new Date(today.getFullYear(), today.getMonth(), SALARY_DAY),
+            'yyyy-MM-dd',
+          ),
+          endDate: this.cycleEndFromStart(
+            new Date(today.getFullYear(), today.getMonth(), SALARY_DAY),
+            SALARY_DAY,
+          ),
+          cycleStatus: FinanceCycleStatus.OPEN,
+          grossSalary: SALARY_ETB,
+          netSalary: SALARY_ETB,
+          fixedObligations: FIXED_ETB,
+          savingsTarget: SAVINGS_ETB,
+          spendingBudget: FOOD_ETB + FRUIT_ETB + OTHER_ETB,
+        }),
+      );
+
+      if (salaryAccount) {
+        await this.transactionsRepo.save(
+          this.transactionsRepo.create({
+            accountId: salaryAccount.id,
+            transactionType: TransactionType.INCOME,
+            amount: SALARY_ETB,
+            grossAmount: SALARY_ETB,
+            netAmount: SALARY_ETB,
+            incomeSource: IncomeSource.SALARY,
+            transactionDate: format(
+              new Date(today.getFullYear(), today.getMonth(), SALARY_DAY),
+              'yyyy-MM-dd',
+            ),
+            description: 'Monthly salary',
+            cycleId: cycle.id,
+            createdBy: userId,
+            status: EntityStatus.ACTIVE,
+          }),
+        );
+      }
+
+      await this.pendingRepo.save([
+        this.pendingRepo.create({
+          createdBy: userId,
+          cycleId: cycle.id,
+          recurringObligationId: rentRecurring.id,
+          categoryId: rentCat.id,
+          name: 'Rent',
+          expectedAmount: RENT_ETB,
+          dueDate: this.dueDateInCycle(cycle.startDate, cycle.endDate, 1),
+          obligationStatus: PendingObligationStatus.PENDING,
+          status: EntityStatus.ACTIVE,
+        }),
+        this.pendingRepo.create({
+          createdBy: userId,
+          cycleId: cycle.id,
+          recurringObligationId: oilRecurring.id,
+          categoryId: oilCat.id,
+          name: 'Oil',
+          expectedAmount: OIL_ETB,
+          dueDate: this.dueDateInCycle(cycle.startDate, cycle.endDate, 10),
+          obligationStatus: PendingObligationStatus.PENDING,
+          status: EntityStatus.ACTIVE,
+        }),
+      ]);
+    }
+
+    await this.notificationsRepo.save(
+      this.notificationsRepo.create({
+        title: 'Welcome to LifeOS',
+        message:
+          'Your finance plan is ready. Log salary on the 10th, then track expenses against Food, Fruit, and Other.',
+        isRead: false,
         createdBy: userId,
         status: EntityStatus.ACTIVE,
       }),
     );
 
-    this.logger.log(`Seeded demo user: ${DEMO_EMAIL}`);
+    this.logger.log(
+      `Seeded ${email}: salary ${SALARY_ETB} ETB on day ${SALARY_DAY}`,
+    );
   }
 }

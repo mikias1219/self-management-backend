@@ -30,6 +30,11 @@ export class HabitsController {
     return this.service.findAllForUser(user.sub);
   }
 
+  @Get('today')
+  findToday(@CurrentUser() user: AuthUserPayload) {
+    return this.service.findAllForUser(user.sub);
+  }
+
   @Get(':id')
   findOne(@CurrentUser() user: AuthUserPayload, @Param('id') id: string) {
     return this.service.findOneForUser(user.sub, id);

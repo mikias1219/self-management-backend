@@ -36,6 +36,20 @@ export class GoalsController {
     });
   }
 
+  @Get('progress-summary')
+  progressSummary(@CurrentUser() user: AuthUserPayload) {
+    return this.service.getProgressSummary(user.sub);
+  }
+
+  @Post(':id/update-progress')
+  updateProgress(
+    @CurrentUser() user: AuthUserPayload,
+    @Param('id') id: string,
+    @Body() body: { progress: number },
+  ) {
+    return this.service.updateProgress(user.sub, id, body.progress);
+  }
+
   @Get(':id')
   findOne(@CurrentUser() user: AuthUserPayload, @Param('id') id: string) {
     return this.service.findOneForUser(user.sub, id);

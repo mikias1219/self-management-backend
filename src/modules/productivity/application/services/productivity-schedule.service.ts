@@ -111,10 +111,9 @@ export class ProductivityScheduleService {
           .catch(() => []),
       ]);
 
-    const calendarEvents =
-      gcStatus.syncReady && googleApiEvents.length > 0
-        ? googleApiEvents
-        : calendar.events;
+    const calendarEvents = gcStatus.syncReady
+      ? googleApiEvents
+      : calendar.events;
 
     const syncedGoogleEventIds = new Set(
       tasks

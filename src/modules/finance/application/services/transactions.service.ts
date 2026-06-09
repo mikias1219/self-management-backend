@@ -165,6 +165,42 @@ export class TransactionsService extends BaseCrudService<FinanceTransaction> {
     };
   }
 
+  async createSimple(
+    userId: string,
+    input: {
+      amount: number;
+      transactionType: TransactionType;
+      categoryId?: string;
+      description?: string;
+      transactionDate?: string;
+      accountId?: string;
+    },
+  ): Promise<FinanceTransaction> {
+    let accountId = input.accountId;
+    if (!accountId) {
+      const accounts = await this.accountsRepo.find({
+        where: { createdBy: userId },
+        order: { createdAt: 'ASC' },
+      });
+      const checking = accounts.find((a) => a.accountType === AccountType.CHECKING);
+      accountId = checking?.id ?? accounts[0]?.id;
+      if (!accountId) {
+        throw new BadRequestException('Add an account before logging transactions');
+      }
+    }
+    return this.create(
+      {
+        accountId,
+        amount: input.amount,
+        transactionType: input.transactionType,
+        categoryId: input.categoryId,
+        description: input.description,
+        transactionDate: input.transactionDate ?? format(new Date(), 'yyyy-MM-dd'),
+      },
+      userId,
+    );
+  }
+
   override async create(
     dto: Partial<FinanceTransaction>,
     userId: string,

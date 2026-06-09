@@ -17,6 +17,7 @@ import {
 import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 import { CreateTransactionDto } from '../../application/dto/create-transaction.dto';
+import { CreateTransactionSimpleDto } from '../../application/dto/create-transaction-simple.dto';
 import { UpdateTransactionDto } from '../../application/dto/update-transaction.dto';
 import { TransactionsService } from '../../application/services/transactions.service';
 
@@ -38,6 +39,14 @@ export class TransactionsController {
   @Get(':id')
   findOne(@CurrentUser() user: AuthUserPayload, @Param('id') id: string) {
     return this.service.findOneForUser(user.sub, id);
+  }
+
+  @Post('simple')
+  createSimple(
+    @CurrentUser() user: AuthUserPayload,
+    @Body() dto: CreateTransactionSimpleDto,
+  ) {
+    return this.service.createSimple(user.sub, dto);
   }
 
   @Post()

@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -47,6 +48,14 @@ export class AiCoachController {
       label: dto.label ?? dto.tool,
       args: dto.args ?? {},
     });
+  }
+
+  @Get('module-insight')
+  moduleInsight(
+    @CurrentUser() user: AuthUserPayload,
+    @Query('module') moduleKey?: string,
+  ) {
+    return this.aiChat.getModuleInsight(user.sub, moduleKey ?? 'insights');
   }
 
   @Get()

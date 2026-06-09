@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Header,
+  Param,
   Patch,
   Post,
   Query,
@@ -103,6 +104,14 @@ export class GoogleCalendarController {
   ) {
     const n = days ? Math.min(60, Math.max(1, parseInt(days, 10))) : 14;
     return this.ical.getUpcomingEvents(user.sub, n);
+  }
+
+  @Delete('events/:eventId')
+  deleteEvent(
+    @CurrentUser() user: AuthUserPayload,
+    @Param('eventId') eventId: string,
+  ) {
+    return this.calendar.deleteCalendarEvent(user.sub, eventId);
   }
 
   @Get('export-info')

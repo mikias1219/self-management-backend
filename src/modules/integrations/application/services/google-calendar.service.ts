@@ -362,6 +362,23 @@ export class GoogleCalendarService {
     return task;
   }
 
+  /** Delete a Google Calendar event by id (for external calendar items in Today view). */
+  async deleteCalendarEvent(userId: string, eventId: string): Promise<void> {
+    const integration = await this.getIntegration(userId);
+    if (!integration) {
+      throw new BadRequestException('Google Calendar is not connected');
+    }
+    try {
+      const calendar = await this.getCalendarClient(userId);
+      await this.deleteEvent(calendar, integration, eventId);
+    } catch (err) {
+      const msg = String(err);
+      if (msg.includes('404') || msg.includes('Not Found')) return;
+      this.logger.warn(`Calendar delete failed for event ${eventId}: ${err}`);
+      throw err;
+    }
+  }
+
   async removeTaskEvent(userId: string, task: Task): Promise<void> {
     if (!task.googleCalendarEventId) return;
     const integration = await this.getIntegration(userId);

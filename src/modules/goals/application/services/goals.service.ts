@@ -9,6 +9,8 @@ import { EntityStatus } from '../../../../common/domain/enums/entity-status.enum
 import { BaseCrudService } from '../../../../common/services/base-crud.service';
 import { ActivityLogsService } from '../../../activity-logs/application/services/activity-logs.service';
 import { GoogleCalendarService } from '../../../integrations/application/services/google-calendar.service';
+import { Task } from '../../../tasks/domain/entities/task.entity';
+import { TaskStatus } from '../../../tasks/domain/enums/task.enums';
 import { Goal } from '../../domain/entities/goal.entity';
 import { CreateGoalDto } from '../dto/create-goal.dto';
 
@@ -19,6 +21,8 @@ export class GoalsService extends BaseCrudService<Goal> {
   constructor(
     @InjectRepository(Goal)
     repository: Repository<Goal>,
+    @InjectRepository(Task)
+    private readonly tasksRepo: Repository<Task>,
     activityLogs: ActivityLogsService,
     private readonly googleCalendar: GoogleCalendarService,
   ) {
@@ -132,5 +136,26 @@ export class GoalsService extends BaseCrudService<Goal> {
     const existing = await this.findOneForUser(userId, id);
     await this.googleCalendar.removeGoalEvent(userId, existing);
     await super.remove(id, userId);
+  }
+
+  async getProgressSummary(userId: string) {
+    const goals = await this.findAllForUser(userId, { includeCompleted: false });
+    const tasks = await this.tasksRepo.find({ where: { createdBy: userId } });
+    return goals.map((goal) => {
+      const linked = tasks.filter((t) => t.goalId === goal.id);
+      const done = linked.filter((t) => t.taskStatus === TaskStatus.DONE).length;
+      return {
+        id: goal.id,
+        title: goal.title,
+        level: goal.level,
+        progress: goal.progress ?? 0,
+        taskCount: linked.length,
+        doneTaskCount: done,
+      };
+    });
+  }
+
+  async updateProgress(userId: string, id: string, progress: number) {
+    return this.update(id, { progress: Math.min(100, Math.max(0, progress)) }, userId);
   }
 }

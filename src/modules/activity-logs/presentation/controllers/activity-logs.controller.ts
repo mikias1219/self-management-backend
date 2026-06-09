@@ -5,7 +5,7 @@ import {
   AuthUserPayload,
   CurrentUser,
 } from '../../../../common/decorators/current-user.decorator';
-import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
+import { ActivityLogsQueryDto } from '../../application/dto/activity-logs-query.dto';
 import { ActivityLogsService } from '../../application/services/activity-logs.service';
 
 @ApiTags('activity-logs')
@@ -18,11 +18,13 @@ export class ActivityLogsController {
   @Get()
   findAll(
     @CurrentUser() user: AuthUserPayload,
-    @Query() query: DateRangeQueryDto,
+    @Query() query: ActivityLogsQueryDto,
   ) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
     if (query.period || query.startDate) {
-      return this.service.findByUser(user.sub, query);
+      return this.service.findByUser(user.sub, query, page, limit);
     }
-    return this.service.findAll(user.sub);
+    return this.service.findAll(user.sub, page, limit);
   }
 }

@@ -50,23 +50,48 @@ export class ActivityLogsService {
     return saved;
   }
 
-  async findByUser(userId: string, query?: DateRangeQueryDto): Promise<ActivityLog[]> {
+  async findByUser(
+    userId: string,
+    query?: DateRangeQueryDto,
+    page = 1,
+    limit = 20,
+  ) {
     const range = resolveDateRange(query?.period, query?.startDate, query?.endDate);
-    return this.repository.find({
+    const [data, total] = await this.repository.findAndCount({
       where: {
         userId,
         createdAt: Between(range.start, range.end),
       },
       order: { createdAt: 'DESC' },
-      take: 100,
+      skip: (page - 1) * limit,
+      take: limit,
     });
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
   }
 
-  async findAll(userId: string): Promise<ActivityLog[]> {
-    return this.repository.find({
+  async findAll(userId: string, page = 1, limit = 20) {
+    const [data, total] = await this.repository.findAndCount({
       where: { userId },
       order: { createdAt: 'DESC' },
-      take: 200,
+      skip: (page - 1) * limit,
+      take: limit,
     });
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
   }
 }

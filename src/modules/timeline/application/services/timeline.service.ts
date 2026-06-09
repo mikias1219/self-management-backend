@@ -34,7 +34,7 @@ export class TimelineService {
     query: DateRangeQueryDto,
   ): Promise<TimelineEvent[]> {
     const range = resolveDateRange(query.period, query.startDate, query.endDate);
-    const [logs, completedTasks, financeTx] = await Promise.all([
+    const [logsResult, completedTasks, financeTx] = await Promise.all([
       this.activityLogs.findByUser(userId, query),
       this.tasksRepo.find({
         where: {
@@ -59,6 +59,7 @@ export class TimelineService {
     ]);
 
     const events: TimelineEvent[] = [];
+    const logs = logsResult.data;
 
     for (const log of logs) {
       events.push({

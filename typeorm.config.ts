@@ -12,6 +12,7 @@ export default new DataSource({
   database: process.env.DATABASE_NAME ?? 'lifeos',
   entities: ['src/**/*.entity.ts'],
   migrations: ['src/database/migrations/*.ts'],
+  migrationsTransactionMode: 'each',
   synchronize: false,
   logging: true,
 });

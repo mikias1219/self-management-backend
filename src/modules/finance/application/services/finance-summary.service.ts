@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
-import { differenceInCalendarDays, format } from 'date-fns';
+import { addDays, differenceInCalendarDays, format } from 'date-fns';
 import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
 import { resolveDateRange } from '../../../../common/utils/date-range.util';
 import { FinanceAccount } from '../../domain/entities/account.entity';
@@ -346,5 +346,67 @@ export class FinanceSummaryService {
           net: v.income - v.expense,
         })),
     };
+  }
+
+  async getMonthSummary(userId: string, month?: string) {
+    const now = new Date();
+    const [year, mon] = (month ?? format(now, 'yyyy-MM')).split('-').map(Number);
+    const start = new Date(year, mon - 1, 1);
+    const end = new Date(year, mon, 0);
+    const query: DateRangeQueryDto = {
+      period: undefined,
+      startDate: format(start, 'yyyy-MM-dd'),
+      endDate: format(end, 'yyyy-MM-dd'),
+    };
+    const summary = await this.getSummary(userId, query);
+    const topExpenseCategories = [...summary.expenseByCategory]
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 3)
+      .map((c) => {
+        const budget = summary.budgets.find((b) => b.categoryId === c.categoryId);
+        return {
+          name: c.name,
+          spent: c.amount,
+          budget: budget?.amount ?? 0,
+        };
+      });
+    const obligations = [
+      ...summary.obligations.overdue,
+      ...summary.obligations.upcoming,
+    ].map((o) => ({
+      name: o.name,
+      dueDate: o.dueDate,
+      paid: false,
+      expectedAmount: o.expectedAmount,
+    }));
+    return {
+      month: month ?? format(now, 'yyyy-MM'),
+      totalIncome: summary.totals.totalIncome,
+      totalExpenses: summary.totals.totalExpense,
+      savingsRate: summary.totals.savingsRate,
+      topExpenseCategories,
+      obligations,
+      budgets: summary.budgets,
+    };
+  }
+
+  async getUpcomingBills(userId: string, days = 7) {
+    const currentCycle = await this.financeCycles.getCurrent(userId);
+    if (!currentCycle) return [];
+    const { upcoming, overdue } = await this.financeCycles.getObligationSummary(
+      userId,
+      currentCycle.id,
+    );
+    const cutoff = format(addDays(new Date(), days), 'yyyy-MM-dd');
+    return [...overdue, ...upcoming]
+      .filter((o) => o.dueDate <= cutoff)
+      .map((o) => ({
+        id: o.id,
+        name: o.name,
+        dueDate: o.dueDate,
+        expectedAmount: toNum(o.expectedAmount),
+        paid: false,
+        status: o.obligationStatus,
+      }));
   }
 }

@@ -21,6 +21,11 @@ export default () => ({
   /** Public base URL for calendar subscribe links (e.g. https://api.yourdomain.com) */
   apiPublicUrl: process.env.API_PUBLIC_URL ?? '',
   seedOnStart: process.env.SEED_ON_START === 'true',
+  seedUser: {
+    email: process.env.SEED_USER_EMAIL ?? 'mikiyasabate003@gmail.com',
+    password: process.env.SEED_USER_PASSWORD ?? '',
+    displayName: process.env.SEED_USER_NAME ?? 'Mikiyas',
+  },
   openApiKey: process.env.OPEN_API_KEY ?? '',
   openAiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
   google: {

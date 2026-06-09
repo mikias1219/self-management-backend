@@ -217,8 +217,12 @@ export class TasksService extends BaseCrudService<Task> {
     if (dto.syncToCalendar !== false && dto.syncToCalendar !== true) {
       patch.syncToCalendar = await this.googleCalendar.isConnected(userId);
     }
+    const linkingExisting = !!(patch as { googleCalendarEventId?: string })
+      .googleCalendarEventId;
     let saved = await super.create(patch, userId);
-    saved = await this.persistCalendarSync(userId, saved);
+    if (!linkingExisting) {
+      saved = await this.persistCalendarSync(userId, saved);
+    }
     if (saved.goalId) {
       await this.syncLinkedGoalProgress(userId, saved.goalId);
     }

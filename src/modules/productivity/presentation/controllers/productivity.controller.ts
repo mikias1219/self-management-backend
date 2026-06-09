@@ -8,6 +8,7 @@ import { AnalyticsPeriod } from '../../../../common/domain/enums/period.enum';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 import { ProductivityMetricsService } from '../../application/services/productivity-metrics.service';
 import { ProductivityScheduleService } from '../../application/services/productivity-schedule.service';
+import { ProductivityTodaySummaryService } from '../../application/services/productivity-today-summary.service';
 
 @ApiTags('productivity')
 @ApiBearerAuth()
@@ -17,6 +18,7 @@ export class ProductivityController {
   constructor(
     private readonly metrics: ProductivityMetricsService,
     private readonly schedule: ProductivityScheduleService,
+    private readonly todaySummary: ProductivityTodaySummaryService,
   ) {}
 
   @Get('metrics')
@@ -28,6 +30,11 @@ export class ProductivityController {
       return this.metrics.getForPeriod(user.sub, period);
     }
     return this.metrics.getAllPeriods(user.sub);
+  }
+
+  @Get('today-summary')
+  getTodaySummary(@CurrentUser() user: AuthUserPayload) {
+    return this.todaySummary.getTodaySummary(user.sub);
   }
 
   @Get('schedule')
