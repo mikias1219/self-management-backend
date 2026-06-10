@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { format } from 'date-fns';
 import { Between, Repository } from 'typeorm';
 import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
+import { TransactionsQueryDto } from '../dto/transactions-query.dto';
 import { ActivityModule } from '../../../../common/domain/enums/activity-action.enum';
 import { resolveDateRange } from '../../../../common/utils/date-range.util';
 import { BaseCrudService } from '../../../../common/services/base-crud.service';
@@ -121,22 +122,40 @@ export class TransactionsService extends BaseCrudService<FinanceTransaction> {
 
   async findAllForUserInPeriod(
     userId: string,
-    query?: DateRangeQueryDto,
-  ): Promise<FinanceTransaction[]> {
-    if (!query?.period && !query?.startDate) {
-      return this.findAllForUser(userId);
+    query?: TransactionsQueryDto,
+  ) {
+    const page = query?.page ?? 1;
+    const limit = query?.limit ?? 20;
+
+    const where: Record<string, unknown> = { createdBy: userId };
+    if (query?.period || query?.startDate) {
+      const range = resolveDateRange(
+        query.period,
+        query.startDate,
+        query.endDate,
+      );
+      where.transactionDate = Between(
+        format(range.start, 'yyyy-MM-dd'),
+        format(range.end, 'yyyy-MM-dd'),
+      );
     }
-    const range = resolveDateRange(query.period, query.startDate, query.endDate);
-    return this.repository.find({
-      where: {
-        createdBy: userId,
-        transactionDate: Between(
-          format(range.start, 'yyyy-MM-dd'),
-          format(range.end, 'yyyy-MM-dd'),
-        ),
-      },
+
+    const [data, total] = await this.repository.findAndCount({
+      where,
       order: { transactionDate: 'DESC', createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
   }
 
   private normalizeSalaryFields(

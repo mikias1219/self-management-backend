@@ -14,7 +14,7 @@ import {
   AuthUserPayload,
   CurrentUser,
 } from '../../../../common/decorators/current-user.decorator';
-import { DateRangeQueryDto } from '../../../../common/dto/date-range.dto';
+import { TransactionsQueryDto } from '../../application/dto/transactions-query.dto';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 import { CreateTransactionDto } from '../../application/dto/create-transaction.dto';
 import { CreateTransactionSimpleDto } from '../../application/dto/create-transaction-simple.dto';
@@ -31,7 +31,7 @@ export class TransactionsController {
   @Get()
   findAll(
     @CurrentUser() user: AuthUserPayload,
-    @Query() query: DateRangeQueryDto,
+    @Query() query: TransactionsQueryDto,
   ) {
     return this.service.findAllForUserInPeriod(user.sub, query);
   }
